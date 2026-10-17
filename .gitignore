@@ -1,0 +1,4 @@
+# Compilados (el ejecutable firmado se publica en Releases)
+*.exe
+*.zip
+*.pdb
