@@ -146,7 +146,7 @@ namespace Panoptic
                 {
                     // El ayudante se reinició: sus números de evento empiezan de nuevo.
                     Settings.SetString("HelperInstance", now);
-                    if (since > 0) { Settings.SetString("HelperSeq", "0"); ev = Request("EVENTS\t0"); }
+                    if (since > 0) { since = 0; Settings.SetString("HelperSeq", "0"); ev = Request("EVENTS\t0"); }
                 }
                 long last = since;
                 foreach (var line in ev.Skip(1))

@@ -821,7 +821,13 @@ namespace Panoptic
                 using (var b = new SolidBrush(Color.FromArgb((int)(255 * 0.14), th.Critical))) g.FillRectangle(b, AreaRect);
 
             var snap = host.Latest;
-            if (snap == null) return;
+            if (snap == null)
+            {
+                // Antes de la primera medición: nunca una isla vacía.
+                DrawText(g, AppInfo.Name + " · Iniciando…", fonts.Body, AreaRect, Secondary,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                return;
+            }
 
             float alpha = ContentAlpha();
             if (alpha >= 0.999f) PaintContent(g, snap);

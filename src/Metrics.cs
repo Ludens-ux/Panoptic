@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -129,7 +129,7 @@ namespace Panoptic
         double lastMhz;
         readonly string cpuName;
         readonly double cpuBaseMhz;
-        readonly int cores;
+        volatile int cores;
 
         // Discos
         sealed class DiskState
@@ -171,9 +171,11 @@ namespace Panoptic
         int gpuHighCount, gpuLowCount;
 
         // GPU, temperatura y batería
-        readonly GpuSensor gpu = new GpuSensor();
-        readonly ThermalSensor thermal = new ThermalSensor();
-        readonly BatterySensor battery = new BatterySensor();
+        // Se crean en segundo plano: al encender la PC, WMI y los contadores de rendimiento pueden tardar minutos.
+        GpuSensor gpu;
+        ThermalSensor thermal;
+        BatterySensor battery;
+        volatile bool sensorsReady, disksReady;
         readonly History gpuHist = new History(), tempHist = new History(), batHist = new History();
         Dictionary<int, float> gpuPerPid = new Dictionary<int, float>();
         readonly HashSet<string> lowSpaceAlerted = new HashSet<string>();
@@ -181,13 +183,34 @@ namespace Panoptic
         public Sampler()
         {
             cpuName = ReadCpuName(out cpuBaseMhz);
-            cores = ReadCoreCount();
-            try { cpuPerf = new PerformanceCounter("Processor Information", "% Processor Performance", "_Total", true); cpuPerf.NextValue(); } catch { cpuPerf = null; }
+            WarmUp();
             NetworkChange.NetworkAddressChanged += (s, e) => netsDirty = true;
             Native.FILETIME i, k, u;
             Native.GetSystemTimes(out i, out k, out u);
             lastIdle = i.Value; lastKernel = k.Value; lastUser = u.Value;
             timer = new Timer(Tick, null, 0, 1000);
+        }
+
+        /// <summary>
+        /// Lo que depende de WMI o de los contadores de rendimiento se prepara en segundo plano: la primera medición
+        /// (CPU, memoria, red y procesos) sale enseguida y el resto se suma apenas está listo.
+        /// </summary>
+        void WarmUp()
+        {
+            new Thread(() =>
+            {
+                try { battery = new BatterySensor(); } catch { }
+                try { cores = ReadCoreCount(); } catch { }
+                try { var c = new PerformanceCounter("Processor Information", "% Processor Performance", "_Total", true); c.NextValue(); cpuPerf = c; } catch { }
+                try { thermal = new ThermalSensor(); } catch { }
+                try { gpu = new GpuSensor(); } catch { }
+                sensorsReady = true;
+            }) { IsBackground = true, Name = "Sensores" }.Start();
+            new Thread(() =>
+            {
+                try { RebuildDisks(); } catch { disksDirty = true; }
+                disksReady = true;
+            }) { IsBackground = true, Name = "Discos" }.Start();
         }
 
         public void InvalidateDisks() { disksDirty = true; }
@@ -256,26 +279,29 @@ namespace Panoptic
 
             Mark("cpu+mem");
             // ---- GPU, temperatura y batería
-            string engine;
-            s.GpuAvailable = gpu.Available;
-            s.Gpu = gpu.Sample(out gpuPerPid, out engine);
+            string engine = null;
+            if (sensorsReady && gpu != null)
+            {
+                s.GpuAvailable = gpu.Available;
+                s.Gpu = gpu.Sample(out gpuPerPid, out engine);
+                s.GpuName = gpu.Name;
+                s.GpuDedicated = gpu.Dedicated;
+                s.GpuShared = gpu.Shared;
+            }
             s.GpuEngine = engine;
-            s.GpuName = gpu.Name;
-            s.GpuDedicated = gpu.Dedicated;
-            s.GpuShared = gpu.Shared;
             gpuHist.Add(s.Gpu);
             s.GpuHistory = gpuHist.Snapshot();
-            if (thermal.Available) s.Temperature = thermal.Read();
+            if (sensorsReady && thermal != null && thermal.Available) s.Temperature = thermal.Read();
             tempHist.Add(double.IsNaN(s.Temperature) ? 0 : (float)s.Temperature);
             s.TempHistory = tempHist.Snapshot();
-            battery.Sample(s);
+            if (sensorsReady && battery != null) battery.Sample(s);
             batHist.Add(s.BatteryPercent);
             s.BatteryHistory = batHist.Snapshot();
 
             Mark("gpu+temp+bat");
             // ---- Discos
-            if (disksDirty) RebuildDisks();
-            foreach (var d in disks)
+            if (disksReady && disksDirty) RebuildDisks();
+            foreach (var d in disksReady ? disks : new List<DiskState>())
             {
                 var dm = d.Meta;
                 var o = new DiskMetric

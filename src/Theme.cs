@@ -82,7 +82,7 @@ namespace Panoptic
             t.ControlFill = t.Dark ? Hex(0x2D2D2D) : Hex(0xFBFBFB);
 
             t.TransparencyEnabled = ForceGlass.HasValue ? ForceGlass.Value
-                : ReadDword(@"SoftwareMicrosoftWindowsCurrentVersionThemesPersonalize", "EnableTransparency", 1) == 1;
+                : ReadDword(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) == 1;
 
             // Efectos de transparencia de Windows (Configuración > Personalización > Colores).
             // Mica y Acrílico existen desde Windows 11 22H2 (compilación 22621).

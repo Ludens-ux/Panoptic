@@ -439,9 +439,13 @@ namespace Panoptic
                 }
                 case 4625:
                 {
-                    string user = Arg(a, 5), ip = Arg(a, 19);
-                    Emit(Category.Seguridad, Severity.Advertencia, "Inicio de sesión fallido para " + (user == "" ? "un usuario desconocido" : Arg(a, 6) + "\\" + user) +
-                        " (" + LogonType(Arg(a, 10)) + (ip != "" && ip != "-" ? ", desde " + ip : "") + ")");
+                    string user = Arg(a, 5), domain = Arg(a, 6), ip = Arg(a, 19), proc = Path.GetFileName(Arg(a, 18));
+                    // Sin usuario ("-"): intentos internos de Windows (por ejemplo, Windows Hello al iniciar).
+                    bool noUser = user == "" || user == "-";
+                    Emit(Category.Seguridad, Severity.Advertencia, "Inicio de sesión fallido para " +
+                        (noUser ? "un usuario desconocido" : (domain != "" && domain != "-" ? domain + "\\" : "") + user) +
+                        " (" + LogonType(Arg(a, 10)) + (ip != "" && ip != "-" ? ", desde " + ip : "") +
+                        (proc != "" && proc != "-" ? ", proceso " + proc : "") + ")");
                     lock (failedLogons)
                     {
                         failedLogons.Enqueue(DateTime.Now);

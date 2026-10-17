@@ -616,28 +616,40 @@ namespace Panoptic
         void CheckServices()
         {
             var list = Services.List();
-            var current = list.Select(s => s.Name + "|" + s.Display).ToList();
+            // Servicios por usuario (AarSvc_90a86, CDPUserSvc_90a86…): Windows les cambia el sufijo en cada inicio de
+            // sesión. Se comparan sin el sufijo para no avisarlos como nuevos cada vez.
+            var names = new HashSet<string>(list.Select(s => s.Name), StringComparer.OrdinalIgnoreCase);
+            Func<string, string> norm = key =>
+            {
+                var p = key.Split('|');
+                var m = System.Text.RegularExpressions.Regex.Match(p[0], "^(.+)_[0-9a-fA-F]{4,8}$");
+                if (!m.Success || !names.Contains(m.Groups[1].Value)) return key;
+                string suffix = p[0].Substring(m.Groups[1].Value.Length);
+                return m.Groups[1].Value + "_*" + (p.Length > 1 ? "|" + (p[1].EndsWith(suffix) ? p[1].Substring(0, p[1].Length - suffix.Length) + "_*" : p[1]) : "");
+            };
+            var current = list.Select(s => norm(s.Name + "|" + s.Display)).Distinct().ToList();
             Compare("servicios.txt", current, added =>
             {
                 var p = added.Split('|');
-                var sv = list.FirstOrDefault(s => s.Name == p[0]);
+                var sv = list.FirstOrDefault(s => s.Name == p[0]) ?? list.FirstOrDefault(s => norm(s.Name + "|" + s.Display) == added);
                 Activity.Add(Category.Servicio, Severity.Advertencia, "Servicio nuevo: " + (p.Length > 1 ? p[1] : p[0]) + " (" + p[0] + ")" +
                     (sv != null && sv.ImagePath != null ? ": " + sv.ImagePath : ""));
             }, removed =>
             {
                 var p = removed.Split('|');
                 Activity.Info(Category.Servicio, "Se eliminó el servicio " + (p.Length > 1 ? p[1] : p[0]) + " (" + p[0] + ")");
-            });
+            }, norm);
         }
 
         /// <summary>Compara con la lista guardada (también entre sesiones) y avisa lo nuevo y lo quitado.</summary>
-        static void Compare(string file, List<string> current, Action<string> onAdded, Action<string> onRemoved)
+        static void Compare(string file, List<string> current, Action<string> onAdded, Action<string> onRemoved, Func<string, string> normalize = null)
         {
             string path = System.IO.Path.Combine(DataDir, file);
             Directory.CreateDirectory(DataDir);
             if (File.Exists(path))
             {
-                var known = new HashSet<string>(File.ReadAllLines(path, Encoding.UTF8));
+                var saved = File.ReadAllLines(path, Encoding.UTF8);
+                var known = new HashSet<string>(normalize != null ? saved.Select(normalize) : saved);
                 var cur = new HashSet<string>(current);
                 foreach (var a in current.Where(c => !known.Contains(c))) onAdded(a);
                 foreach (var r in known.Where(k => !cur.Contains(k))) onRemoved(r);
