@@ -218,7 +218,7 @@ namespace Panoptic
                 w.Relayout();
                 Save(w, System.IO.Path.Combine(dir, "widget.png"));
             }
-            foreach (var page in new[] { "perf", "procs", "log", "hist", "net", "net-scroll", "files", "startup", "services", "settings" })
+            foreach (var page in new[] { "perf", "procs", "log", "hist", "net", "net-scroll", "files", "startup", "services", "settings", "settings-end" })
             {
                 using (var m = new MainWindow(host))
                 {
@@ -226,7 +226,8 @@ namespace Panoptic
                     var h = m.Handle;
                     m.WindowState = FormWindowState.Normal;
                     m.Size = new Size(page.EndsWith("-scroll") ? 820 : 1040, 700);
-                    m.PreviewPage(page.Replace("-scroll", ""), "cpu", 10420, page.EndsWith("-scroll") ? 50 : 0);
+                    m.PreviewPage(page.Replace("-scroll", "").Replace("-end", ""), "cpu", 10420, page.EndsWith("-scroll") ? 50 : page.EndsWith("-end") ? 99999 : 0);
+                    if (page.EndsWith("-end")) m.RenderToBitmap().Dispose(); // primera pasada: mide el contenido y ajusta el desplazamiento
                     Save(m, System.IO.Path.Combine(dir, "main-" + page + ".png"));
                 }
             }

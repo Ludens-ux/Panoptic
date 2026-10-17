@@ -710,10 +710,26 @@ namespace Panoptic
                     () => { try { Process.Start("explorer.exe", "\"" + System.IO.Path.GetDirectoryName(HistoryStore.FilePath) + "\""); } catch { } });
                 y += rowH + gap;
             }
+
+            // ---- Acerca de
+            section("Acerca de");
+            Action<string, string, string, string, string, Action> linkCard = (glyph, title, desc, key, button, click) =>
             {
-                SettingCard(g, new Rectangle(x, y, w, rowH), Glyphs.Info, AppInfo.Name + " " + AppInfo.Version, "Autor: " + AppInfo.Author, 0);
+                int bw = MeasureText(button, fonts.Body) + S(56);
+                var cr = SettingCard(g, new Rectangle(x, y, w, rowH), glyph, title, desc, bw);
+                StandardButton(g, key, new Rectangle(cr.Right - bw, cr.Y + (cr.Height - S(32)) / 2, bw, S(32)), Glyphs.OpenExternal, button, false, true, click);
+                y += rowH + gap;
+            };
+            {
+                var cr = SettingCard(g, new Rectangle(x, y, w, rowH), Glyphs.Info, AppInfo.Name + " " + AppInfo.Version,
+                    "© 2026 " + AppInfo.Author + " · " + AppInfo.Description, S(120));
+                StandardButton(g, "about", new Rectangle(cr.Right - S(120), cr.Y + (cr.Height - S(32)) / 2, S(120), S(32)), null, "Acerca de", false, true,
+                    () => AppInfo.ShowAbout(this));
                 y += rowH + gap;
             }
+            linkCard(Glyphs.Lock, "Licencia: " + AppInfo.LicenseName, AppInfo.LicenseSummary, "about-license", "Ver licencia", () => AppInfo.Open(AppInfo.LicenseUrl));
+            linkCard(Glyphs.Shield, "Privacidad", AppInfo.PrivacySummary, "about-privacy", "Ver política", () => AppInfo.Open(AppInfo.PrivacyUrl));
+            linkCard(Glyphs.Globe, "Código fuente", AppInfo.Repo.Replace("https://", ""), "about-repo", "Abrir en GitHub", () => AppInfo.Open(AppInfo.Repo));
 
             listContent = y + ScrollPos - listView.Y + S(16);
             g.Restore(state);
