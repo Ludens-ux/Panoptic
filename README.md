@@ -111,3 +111,12 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 Usa el compilador de C# que trae Windows (.NET Framework 4.8) y firma el ejecutable con el certificado de @villargonza.
 
 Para revisar el diseño sin tocar el sistema, `Panoptic.exe --render carpeta [dark|light]` genera capturas con datos de ejemplo.
+
+## Licencia
+
+Copyright 2026 @villargonza. Publicado bajo la [PolyForm Noncommercial License 1.0.0](LICENSE.md):
+
+- **Se puede** usar, estudiar, modificar y compartir gratis, para uso personal, educativo, de investigación o en organizaciones sin fines de lucro.
+- **No se puede** vender ni usar con fines comerciales, ni el programa ni versiones modificadas.
+
+El autor se reserva el derecho de distribuirlo comercialmente (por ejemplo, en la Microsoft Store).
