@@ -40,7 +40,7 @@ Todo queda en tu usuario de Windows:
 | Preferencias | Registro de Windows, `HKEY_CURRENT_USER\Software\Panoptic` |
 
 - El historial de rendimiento se conserva la cantidad de días elegida en Configuración (hasta 30).
-- El registro de actividad se conserva hasta que lo borres.
+- El registro de actividad se conserva 30 días por defecto (se puede elegir entre 7 días y 1 año en Configuración); los eventos más viejos se borran solos.
 - Los informes que exportás (HTML o CSV) se guardan solo donde vos elijas.
 
 ## Conexiones a internet

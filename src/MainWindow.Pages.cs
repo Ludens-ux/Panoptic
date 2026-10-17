@@ -697,6 +697,14 @@ namespace Panoptic
             stepper(Glyphs.History, "Conservar historial", "Días de historial de rendimiento guardados", Settings.HistoryDays + (Settings.HistoryDays == 1 ? " día" : " días"),
                 () => Settings.HistoryDays = clamp(Settings.HistoryDays - 1, 1, 30), () => Settings.HistoryDays = clamp(Settings.HistoryDays + 1, 1, 30));
             {
+                var opts = Settings.LogDayOptions;
+                int idx = Array.IndexOf(opts, Settings.LogDays);
+                if (idx < 0) idx = Array.IndexOf(opts, 30);
+                Action<int> pick = d => { Settings.LogDays = opts[clamp(idx + d, 0, opts.Length - 1)]; Activity.Prune(Settings.LogDays); };
+                stepper(Glyphs.Log, "Conservar registro de actividad", "Los eventos más viejos se borran solos",
+                    Settings.LogDays + " días", () => pick(-1), () => pick(1));
+            }
+            {
                 var cr = SettingCard(g, new Rectangle(x, y, w, rowH), Glyphs.Folder, "Carpeta de datos", ShownPath(System.IO.Path.GetDirectoryName(HistoryStore.FilePath)), S(120));
                 StandardButton(g, "datafolder", new Rectangle(cr.Right - S(120), cr.Y + (cr.Height - S(32)) / 2, S(120), S(32)), null, "Abrir", false, true,
                     () => { try { Process.Start("explorer.exe", "\"" + System.IO.Path.GetDirectoryName(HistoryStore.FilePath) + "\""); } catch { } });

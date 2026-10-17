@@ -53,6 +53,7 @@ namespace Panoptic
             var up = TimeSpan.FromMilliseconds(Native.GetTickCount64());
             Activity.Info(Category.Monitor, AppInfo.Name + " " + AppInfo.Version + " iniciado. Windows está encendido desde hace " + Format.Duration(up) + ".");
             ReactivateHelperAfterRename();
+            if (!ProfileMode) Activity.StartRetention();
 
             tray.MouseClick += OnTrayClick;
             tray.MouseDown += (o, e) =>

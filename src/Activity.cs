@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
@@ -117,6 +117,48 @@ namespace Panoptic
         }
 
         /// <summary>Carga las últimas entradas del archivo de sesiones anteriores.</summary>
+        // ---- Conservación: se borran los eventos más viejos que los días elegidos (al iniciar y cada 6 horas).
+        static System.Threading.Timer retention;
+
+        public static void StartRetention()
+        {
+            if (MemoryOnly || retention != null) return;
+            retention = new System.Threading.Timer(o => Prune(Settings.LogDays), null, TimeSpan.FromSeconds(20), TimeSpan.FromHours(6));
+        }
+
+        /// <summary>Quita del archivo los eventos de hace más de <paramref name="days"/> días.</summary>
+        public static void Prune(int days)
+        {
+            if (MemoryOnly) return;
+            string limit = DateTime.Now.AddDays(-days).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            try
+            {
+                lock (gate)
+                {
+                    if (PruneFile(FilePath, limit) == 0) return;
+                    int removed = entries.RemoveAll(e => e.Time < DateTime.Now.AddDays(-days));
+                    if (removed > 0) Version++;
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Quita de un archivo de registro las líneas anteriores a <paramref name="limit"/>. Devuelve cuántas quitó.</summary>
+        internal static int PruneFile(string path, string limit)
+        {
+            if (!File.Exists(path)) return 0;
+            var lines = File.ReadAllLines(path, Encoding.UTF8);
+            if (lines.Length > 0) lines[0] = lines[0].TrimStart('﻿');
+            // Las líneas empiezan con la fecha en formato ordenable: alcanza con comparar el texto.
+            int first = 0;
+            while (first < lines.Length && lines[first].Length >= 19 && string.CompareOrdinal(lines[first], 0, limit, 0, 19) < 0) first++;
+            if (first == 0) return 0;
+            string tmp = path + ".tmp";
+            File.WriteAllLines(tmp, lines.Skip(first), new UTF8Encoding(false));
+            File.Replace(tmp, path, null);
+            return first;
+        }
+
         public static void LoadPrevious(int max)
         {
             try

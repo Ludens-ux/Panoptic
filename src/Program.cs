@@ -21,6 +21,9 @@ namespace Panoptic
             if (args.Length >= 1 && args[0] == "--install-helper") return HelperService.Install();
             if (args.Length >= 1 && args[0] == "--uninstall-helper") return HelperService.Uninstall();
             if (args.Length >= 3 && args[0] == "--helper-query") return HelperQuery(args);
+            // Diagnóstico: limpia un archivo de registro dado (--prune-file archivo días).
+            if (args.Length >= 3 && args[0] == "--prune-file")
+                return Activity.PruneFile(args[1], DateTime.Now.AddDays(-int.Parse(args[2])).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
             if (args.Length >= 2 && args[0] == "--profile")
                 return Profile(args[1]);
 

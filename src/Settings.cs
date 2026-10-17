@@ -66,6 +66,9 @@ namespace Panoptic
         public static readonly string[] HotkeyNames = { "Desactivado", "Ctrl + Mayús + M", "Ctrl + Alt + M", "Windows + Mayús + M" };
 
         // ---- Historial
+        /// <summary>Días que se conserva el registro de actividad.</summary>
+        public static int LogDays { get { return Get("LogDays", 30); } set { Set("LogDays", value); } }
+        public static readonly int[] LogDayOptions = { 7, 15, 30, 60, 90, 180, 365 };
         public static int HistoryDays { get { return Get("HistoryDays", 7); } set { Set("HistoryDays", value); } }
 
         // ---- Estilo del widget: el widget clásico o la isla dinámica
