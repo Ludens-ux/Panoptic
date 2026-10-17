@@ -1,6 +1,6 @@
 # Panoptic
 
-**Versión 1.4.2** · Autor: **@villargonza**
+**Versión 1.4.3** · Autor: **@villargonza**
 
 Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. Funciona sin permisos de administrador; las [funciones avanzadas](#funciones-de-administrador) los piden una sola vez.
 

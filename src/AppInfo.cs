@@ -5,16 +5,16 @@ using System.Reflection;
 [assembly: AssemblyProduct("Panoptic")]
 [assembly: AssemblyCompany("@villargonza")]
 [assembly: AssemblyCopyright("© 2026 @villargonza")]
-[assembly: AssemblyVersion("1.4.2.0")]
-[assembly: AssemblyFileVersion("1.4.2.0")]
-[assembly: AssemblyInformationalVersion("1.4.2")]
+[assembly: AssemblyVersion("1.4.3.0")]
+[assembly: AssemblyFileVersion("1.4.3.0")]
+[assembly: AssemblyInformationalVersion("1.4.3")]
 
 namespace Panoptic
 {
     internal static class AppInfo
     {
         public const string Name = "Panoptic";
-        public const string Version = "1.4.2";
+        public const string Version = "1.4.3";
         public const string Author = "@villargonza";
         public const string Repo = "https://github.com/Ludens-ux/Panoptic";
         public const string Description = "Rendimiento en vivo, procesos y registro de actividad de la PC.";
