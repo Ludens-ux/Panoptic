@@ -120,3 +120,7 @@ Copyright 2026 @villargonza. Publicado bajo la [PolyForm Noncommercial License 1
 - **No se puede** vender ni usar con fines comerciales, ni el programa ni versiones modificadas.
 
 El autor se reserva el derecho de distribuirlo comercialmente (por ejemplo, en la Microsoft Store).
+
+## Privacidad
+
+Panoptic no envía datos a ningún servidor: todo lo que registra queda en tu PC. Detalle completo en la [política de privacidad](PRIVACY.md).

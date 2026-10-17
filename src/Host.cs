@@ -53,8 +53,12 @@ namespace Panoptic
             FluentMenu.Add(m, "Administrador de tareas de Windows", Glyphs.Performance, true, host.OpenTaskManager);
             FluentMenu.Add(m, "Abrir el archivo de registro", Glyphs.Log, true, host.OpenLogFile);
             FluentMenu.Add(m, "Acerca de " + AppInfo.Name, Glyphs.Info, true, () =>
-                MessageBox.Show(AppInfo.Name + "\nVersión " + AppInfo.Version + "\nAutor: " + AppInfo.Author +
-                    "\n\nRendimiento en vivo, procesos y registro de actividad de la PC.", "Acerca de " + AppInfo.Name,
+                MessageBox.Show(AppInfo.Name + "\nVersión " + AppInfo.Version + "\n© 2026 " + AppInfo.Author +
+                    "\n\nRendimiento en vivo, procesos y registro de actividad de la PC." +
+                    "\n\nLicencia: PolyForm Noncommercial 1.0.0. Uso gratuito, personal y no comercial; no se puede vender ni usar con fines comerciales." +
+                    "\n" + AppInfo.Repo + "/blob/main/LICENSE.md" +
+                    "\n\nPrivacidad: no envía datos a ningún servidor. Todo lo que registra queda en tu PC (%LOCALAPPDATA%\\" + AppInfo.Name + ")." +
+                    "\n" + AppInfo.Repo + "/blob/main/PRIVACY.md", "Acerca de " + AppInfo.Name,
                     MessageBoxButtons.OK, MessageBoxIcon.Information));
             FluentMenu.Separator(m);
             FluentMenu.Add(m, "Salir", Glyphs.Cancel, true, host.Exit);
