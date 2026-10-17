@@ -14,16 +14,16 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
-    /// Ayudante con privilegios (Monitor.exe --helper). Corre elevado mediante una tarea programada y atiende a la
-    /// ventana por un canal con nombre que solo acepta conexiones del propio Monitor.exe.
+    /// Ayudante con privilegios (Panoptic.exe --helper). Corre elevado mediante una tarea programada y atiende a la
+    /// ventana por un canal con nombre que solo acepta conexiones del propio Panoptic.exe.
     /// </summary>
     internal static class HelperService
     {
-        public const string PipeName = "SysMonitor.Helper";
-        public const string TaskName = "SysMonitorHelper";
+        public const string PipeName = "Panoptic.Helper";
+        public const string TaskName = "PanopticHelper";
         public const string Protocol = "1";
 
         static readonly Guid KernelProcess = new Guid("22FB2CD6-0E7B-422B-A0C7-2FAD1FD0E716");
@@ -55,7 +55,7 @@ namespace SysMonitor
         {
             if (!IsAdmin() || !EtwSession.Supported) return 2;
             bool created;
-            using (var mutex = new Mutex(true, @"Local\SysMonitor.Helper", out created))
+            using (var mutex = new Mutex(true, @"Local\Panoptic.Helper", out created))
             {
                 if (!created) return 0;
                 Emit(Category.Monitor, Severity.Info, "Funciones de administrador activas");
@@ -87,7 +87,7 @@ namespace SysMonitor
             foreach (var p in Process.GetProcesses()) using (p) try { names[p.Id] = p.ProcessName + ".exe"; } catch { }
             try
             {
-                mainSession = new EtwSession("SysMonitor-Main", OnMainEvent);
+                mainSession = new EtwSession("Panoptic-Main", OnMainEvent);
                 mainSession.Start();
                 mainSession.Enable(KernelProcess, 0x10, 4);          // WINEVENT_KEYWORD_PROCESS
                 mainSession.Enable(KernelNetwork, 0x10 | 0x20, 4);   // IPv4 e IPv6
@@ -119,7 +119,7 @@ namespace SysMonitor
             "sppsvc.exe", "MoUsoCoreWorker.exe", "CompPkgSrv.exe", "WerFault.exe", "wermgr.exe", "SgrmBroker.exe",
             "msedgewebview2.exe", "crashpad_handler.exe", "chrome_crashpad_handler.exe", "TiWorker.exe", "UsoClient.exe"
         };
-        static readonly HashSet<string> OurApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Monitor.exe", "WriteBlocker.exe" };
+        static readonly HashSet<string> OurApps = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Panoptic.exe", "WriteBlocker.exe" };
 
         static void OnProcess(IntPtr rec)
         {
@@ -297,7 +297,7 @@ namespace SysMonitor
             if (fileSession != null) return;
             try
             {
-                fileSession = new EtwSession("SysMonitor-Files", OnFileEvent);
+                fileSession = new EtwSession("Panoptic-Files", OnFileEvent);
                 fileSession.Start();
                 // FILENAME | FILEIO | CREATE | READ | WRITE
                 fileSession.Enable(KernelFile, 0x10 | 0x20 | 0x80 | 0x100 | 0x200, 4);
@@ -524,7 +524,7 @@ namespace SysMonitor
 
         // ---------------------------------------------------------------- firewall
 
-        const string RulePrefix = "SysMonitor: bloquear ";
+        const string RulePrefix = "Panoptic: bloquear ";
 
         static string FirewallBlock(string path, bool block)
         {
@@ -594,7 +594,7 @@ namespace SysMonitor
             {
                 try
                 {
-                    // Solo el usuario de esta sesión puede conectarse, y además se verifica que sea Monitor.exe.
+                    // Solo el usuario de esta sesión puede conectarse, y además se verifica que sea Panoptic.exe.
                     var sec = new PipeSecurity();
                     sec.AddAccessRule(new PipeAccessRule(me, PipeAccessRights.ReadWrite | PipeAccessRights.CreateNewInstance, AccessControlType.Allow));
                     using (var pipe = new NamedPipeServerStream(PipeName, PipeDirection.InOut, 4, PipeTransmissionMode.Byte, PipeOptions.None, 65536, 65536, sec))
@@ -709,23 +709,64 @@ namespace SysMonitor
             string xml =
                 "<?xml version=\"1.0\" encoding=\"UTF-16\"?>\r\n" +
                 "<Task version=\"1.2\" xmlns=\"http://schemas.microsoft.com/windows/2004/02/mit/task\">\r\n" +
-                "  <RegistrationInfo><Description>Funciones de administrador del Monitor del sistema</Description></RegistrationInfo>\r\n" +
+                "  <RegistrationInfo><Description>Funciones de administrador de Panoptic</Description></RegistrationInfo>\r\n" +
                 "  <Triggers><LogonTrigger><Enabled>true</Enabled><UserId>" + user + "</UserId></LogonTrigger></Triggers>\r\n" +
                 "  <Principals><Principal id=\"Author\"><UserId>" + user + "</UserId><LogonType>InteractiveToken</LogonType><RunLevel>HighestAvailable</RunLevel></Principal></Principals>\r\n" +
                 "  <Settings><MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy><DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>" +
                 "<StopIfGoingOnBatteries>false</StopIfGoingOnBatteries><ExecutionTimeLimit>PT0S</ExecutionTimeLimit><Priority>7</Priority></Settings>\r\n" +
                 "  <Actions Context=\"Author\"><Exec><Command>" + exe + "</Command><Arguments>--helper</Arguments></Exec></Actions>\r\n" +
                 "</Task>\r\n";
-            string tmp = Path.Combine(Path.GetTempPath(), "SysMonitorHelper.task.xml");
+            string tmp = Path.Combine(Path.GetTempPath(), "PanopticHelper.task.xml");
             File.WriteAllText(tmp, xml, Encoding.Unicode);
             try
             {
                 int code = RunHidden("schtasks.exe", "/Create /TN \"" + TaskName + "\" /XML \"" + tmp + "\" /F");
                 if (code != 0) return code;
+                RemoveOldName();
                 RunHidden("schtasks.exe", "/Run /TN \"" + TaskName + "\"");
                 return 0;
             }
             finally { try { File.Delete(tmp); } catch { } }
+        }
+
+        /// <summary>Quita lo que dejó la versión con el nombre anterior: su tarea, su ayudante y sus sesiones; renombra las reglas del firewall.</summary>
+        static void RemoveOldName()
+        {
+            try
+            {
+                RunHidden("schtasks.exe", "/End /TN \"" + Migration.OldTask + "\"");
+                RunHidden("schtasks.exe", "/Delete /TN \"" + Migration.OldTask + "\" /F");
+                KillHelpers("Monitor.exe");
+                EtwSession.StopExisting(Migration.OldEtwMain);
+                EtwSession.StopExisting(Migration.OldEtwFiles);
+                dynamic policy = Activator.CreateInstance(Type.GetTypeFromProgID("HNetCfg.FwPolicy2"));
+                var old = new List<dynamic>();
+                foreach (dynamic r in policy.Rules)
+                {
+                    string n = r.Name;
+                    if (n != null && n.StartsWith(Migration.OldRulePrefix)) old.Add(r);
+                }
+                foreach (dynamic r in old)
+                {
+                    string n = r.Name;
+                    r.Name = RulePrefix + n.Substring(Migration.OldRulePrefix.Length);
+                }
+            }
+            catch { }
+        }
+
+        /// <summary>Cierra los ayudantes (procesos "--helper") del ejecutable indicado.</summary>
+        static void KillHelpers(string exeName)
+        {
+            try
+            {
+                using (var q = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = '" + exeName + "'"))
+                    foreach (ManagementObject p in q.Get())
+                        using (p)
+                            if (Convert.ToString(p["CommandLine"]).Contains("--helper") && Convert.ToInt32(p["ProcessId"]) != Process.GetCurrentProcess().Id)
+                                try { using (var pr = Process.GetProcessById(Convert.ToInt32(p["ProcessId"]))) pr.Kill(); } catch { }
+            }
+            catch { }
         }
 
         public static int Uninstall()
@@ -734,17 +775,9 @@ namespace SysMonitor
             RunHidden("schtasks.exe", "/End /TN \"" + TaskName + "\"");
             RunHidden("schtasks.exe", "/Delete /TN \"" + TaskName + "\" /F");
             // Cerrar el ayudante si quedó corriendo.
-            try
-            {
-                using (var q = new ManagementObjectSearcher("SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'Monitor.exe'"))
-                    foreach (ManagementObject p in q.Get())
-                        using (p)
-                            if (Convert.ToString(p["CommandLine"]).Contains("--helper"))
-                                try { using (var pr = Process.GetProcessById(Convert.ToInt32(p["ProcessId"]))) pr.Kill(); } catch { }
-            }
-            catch { }
-            EtwSession.StopExisting("SysMonitor-Main");
-            EtwSession.StopExisting("SysMonitor-Files");
+            KillHelpers("Panoptic.exe");
+            EtwSession.StopExisting("Panoptic-Main");
+            EtwSession.StopExisting("Panoptic-Files");
             return 0;
         }
     }

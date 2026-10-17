@@ -5,7 +5,7 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Reloj de alta precisión para las animaciones. DateTime.Now en .NET Framework solo avanza cada ~15,6 ms,

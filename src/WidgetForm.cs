@@ -5,12 +5,12 @@ using System.Linq;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Widget de escritorio: se puede mover, fijar arriba de todo y bloquear en su lugar.</summary>
     internal sealed class WidgetForm : Surface
     {
-        const string Key = @"Software\SysMonitor";
+        const string Key = @"Software\Panoptic";
         const int LogicalWidth = 300;
         readonly IHost host;
         readonly Timer refresh = new Timer();
@@ -22,7 +22,7 @@ namespace SysMonitor
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
-            Text = "Widget del Monitor del sistema";
+            Text = "Widget de Panoptic";
             refresh.Interval = 1000;
             refresh.Tick += (o, e) => Invalidate();
             LocationChanged += (o, e) => { if (VibrancyOn) Invalidate(); };
@@ -201,7 +201,7 @@ namespace SysMonitor
             }
             FluentMenu.Separator(m);
             FluentMenu.Add(m, "Personalizar widget…", Glyphs.Settings, true, () => host.OpenMain("settings"));
-            FluentMenu.Add(m, "Abrir Monitor del sistema", Glyphs.OpenExternal, true, () => host.OpenMain(null));
+            FluentMenu.Add(m, "Abrir Panoptic", Glyphs.OpenExternal, true, () => host.OpenMain(null));
             FluentMenu.Add(m, "Ocultar widget", Glyphs.Cancel, true, host.ToggleWidget);
             m.Closed += (o, e) => BeginInvoke(new Action(m.Dispose));
             m.Show(this, at);
@@ -264,7 +264,7 @@ namespace SysMonitor
             else g.Clear(th.Glass ? GlassTint : th.Layer);
             int W = ClientSize.Width;
             Glyph(g, Glyphs.Performance, fonts.Glyph16, new Rectangle(S(14), S(12), S(20), S(24)), th.Accent);
-            DrawText(g, "Monitor", fonts.BodyStrong, new Rectangle(S(42), S(12), S(140), S(24)), th.Text);
+            DrawText(g, AppInfo.Name, fonts.BodyStrong, new Rectangle(S(42), S(12), S(140), S(24)), th.Text);
             SubtleButton(g, "more", new Rectangle(W - S(8) - S(32), S(8), S(32), S(32)), Glyphs.More, null, "Opciones del widget",
                 () => ShowOptions(new Point(W - S(8), S(40))));
             var pin = SubtleButton(g, "pin", new Rectangle(W - S(8) - S(68), S(8), S(32), S(32)), TopMost ? Glyphs.Unpin : Glyphs.Pin, null,

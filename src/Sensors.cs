@@ -5,7 +5,7 @@ using System.Linq;
 using System.Management;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Uso de la GPU por motor y por proceso, como lo calcula el Administrador de tareas.</summary>
     internal sealed class GpuSensor

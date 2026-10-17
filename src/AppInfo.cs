@@ -1,20 +1,20 @@
 using System.Reflection;
 
-[assembly: AssemblyTitle("Monitor del sistema")]
+[assembly: AssemblyTitle("Panoptic")]
 [assembly: AssemblyDescription("Rendimiento en vivo, procesos y registro de actividad de la PC")]
-[assembly: AssemblyProduct("Monitor del sistema")]
+[assembly: AssemblyProduct("Panoptic")]
 [assembly: AssemblyCompany("@villargonza")]
 [assembly: AssemblyCopyright("© 2026 @villargonza")]
-[assembly: AssemblyVersion("1.3.2.0")]
-[assembly: AssemblyFileVersion("1.3.2.0")]
-[assembly: AssemblyInformationalVersion("1.3.2")]
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]
+[assembly: AssemblyInformationalVersion("1.4.0")]
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal static class AppInfo
     {
-        public const string Name = "Monitor del sistema";
-        public const string Version = "1.3.2";
+        public const string Name = "Panoptic";
+        public const string Version = "1.4.0";
         public const string Author = "@villargonza";
     }
 }

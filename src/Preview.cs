@@ -5,11 +5,11 @@ using System.Drawing.Imaging;
 using System.Globalization;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Exporta capturas con datos de ejemplo, sin leer el sistema:
-    /// Monitor.exe --render carpeta [dark|light]
+    /// Panoptic.exe --render carpeta [dark|light]
     /// </summary>
     internal static class Preview
     {
@@ -65,7 +65,7 @@ namespace SysMonitor
                 P("WINWORD", "Microsoft Word", 0.2f, 205, true, 7716), P("MsMpEng", "Antimalware Service Executable", 2.6f, 260, false, 4120),
                 P("dwm", "Administrador de ventanas del escritorio", 1.8f, 98, false, 1312), P("svchost", "Host de servicio: Servicio de directivas de diagnóstico", 0.3f, 24, false, 2244),
                 P("SearchIndexer", "Microsoft Windows Search Indexer", 0.1f, 48, false, 6630), P("audiodg", "Aislamiento de gráficos de dispositivos de audio de Windows", 0.4f, 12, false, 9932),
-                P("System", null, 0.9f, 1, false, 4), P("SysMonitor", "Monitor del sistema", 0.3f, 38, false, 12008),
+                P("System", null, 0.9f, 1, false, 4), P("Panoptic", "Panoptic", 0.3f, 38, false, 12008),
             });
             return s;
         }
@@ -73,7 +73,7 @@ namespace SysMonitor
         static void Seed()
         {
             Activity.MemoryOnly = true;
-            Activity.Info(Category.Monitor, "Monitor del sistema " + AppInfo.Version + " iniciado. Windows está encendido desde hace 3 h 12 min.");
+            Activity.Info(Category.Monitor, "Panoptic " + AppInfo.Version + " iniciado. Windows está encendido desde hace 3 h 12 min.");
             Activity.Info(Category.Red, "Conectado a Wi-Fi \"Casa\", IP 192.168.0.24");
             Activity.Info(Category.Programa, "Se abrió Google Chrome (chrome.exe, PID 10420)");
             Activity.Info(Category.Dispositivo, "Se conectó Kingston DataTraveler 3.0");

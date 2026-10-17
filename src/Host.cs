@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal interface IHost
     {
@@ -45,7 +45,7 @@ namespace SysMonitor
         public static ContextMenuStrip Settings(Theme th, float s, IHost host, bool includeOpen)
         {
             var m = FluentMenu.Create(th, s);
-            if (includeOpen) FluentMenu.Add(m, "Abrir Monitor del sistema", Glyphs.OpenExternal, true, () => host.OpenMain(null));
+            if (includeOpen) FluentMenu.Add(m, "Abrir Panoptic", Glyphs.OpenExternal, true, () => host.OpenMain(null));
             var w = FluentMenu.Add(m, "Widget en el escritorio", Glyphs.Widget, true, host.ToggleWidget);
             w.Checked = host.WidgetVisible;
             var a = FluentMenu.Add(m, "Iniciar con Windows", Glyphs.Startup, true, host.ToggleAutostart);

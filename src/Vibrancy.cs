@@ -8,7 +8,7 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Efecto "vibrancy" al estilo macOS: el fondo de pantalla que queda detrás de la ventana, desenfocado y

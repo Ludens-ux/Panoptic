@@ -9,7 +9,7 @@ using System.Net;
 using System.Text;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal sealed partial class MainWindow
     {

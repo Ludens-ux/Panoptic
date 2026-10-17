@@ -4,7 +4,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Panel compacto que se abre desde el área de notificación.</summary>
     internal sealed class TrayFlyout : Surface
@@ -166,7 +166,7 @@ namespace SysMonitor
             string sub = snap == null ? "Midiendo…" : "Encendido hace " + Format.Duration(snap.Uptime) + " · " + snap.ProcessCount + " procesos";
             DrawText(g, sub, fonts.Caption, new Rectangle(S(68), S(38), W - S(130), S(18)), th.TextSecondary);
             SubtleButton(g, "open", new Rectangle(W - S(12) - S(40), S(20), S(40), S(32)), Glyphs.OpenExternal, null,
-                "Abrir Monitor del sistema", () => Open(null));
+                "Abrir Panoptic", () => Open(null));
             y = S(72);
 
             // ---- Mosaicos

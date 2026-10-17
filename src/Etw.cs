@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Sesión de ETW en tiempo real (sin librerías externas). Recibe los eventos de los proveedores del kernel

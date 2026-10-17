@@ -1,7 +1,7 @@
-﻿# Compila Monitor.exe con el compilador de C# que trae Windows (.NET Framework 4.8).
+﻿# Compila Panoptic.exe con el compilador de C# que trae Windows (.NET Framework 4.8).
 # No hace falta instalar nada. Uso:  powershell -ExecutionPolicy Bypass -File build.ps1
 param(
-    [string]$Out = "$PSScriptRoot\Monitor.exe",
+    [string]$Out = "$PSScriptRoot\Panoptic.exe",
     [string]$Manifest = "$PSScriptRoot\src\app.manifest",
     [switch]$NoSign
 )

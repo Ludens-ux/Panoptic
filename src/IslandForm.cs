@@ -8,7 +8,7 @@ using System.Linq;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Isla dinámica: una barra compacta arriba al centro (o sobre la barra de tareas) que se expande con un
@@ -51,8 +51,8 @@ namespace SysMonitor
             ShowInTaskbar = false;
             StartPosition = FormStartPosition.Manual;
             TopMost = true;
-            Text = "Isla del Monitor del sistema";
-            AccessibleName = "Isla del Monitor del sistema";
+            Text = "Isla de Panoptic";
+            AccessibleName = "Isla de Panoptic";
 
             data.Interval = 1000;
             data.Tick += (o, e) => OnData();
@@ -797,7 +797,7 @@ namespace SysMonitor
             var ac = FluentMenu.Add(m, "Todos los anillos con el color de acento", null, true, () => { Settings.IslandColorMode = Settings.IslandColorMode == "Accent" ? "PerMetric" : "Accent"; Invalidate(); });
             ac.Checked = Settings.IslandColorMode == "Accent";
             FluentMenu.Separator(m);
-            FluentMenu.Add(m, "Abrir Monitor del sistema", Glyphs.OpenExternal, true, () => host.OpenMain(null));
+            FluentMenu.Add(m, "Abrir Panoptic", Glyphs.OpenExternal, true, () => host.OpenMain(null));
             FluentMenu.Add(m, "Configuración de la isla…", Glyphs.Settings, true, () => host.OpenMain("settings"));
             FluentMenu.Add(m, "Ocultar isla", Glyphs.Cancel, true, host.ToggleWidget);
             openMenu = m;
@@ -1042,9 +1042,9 @@ namespace SysMonitor
         void Header(Graphics g, Rectangle r)
         {
             AppIcon(g, new Rectangle(r.X, r.Y + (r.Height - S(24)) / 2, S(24), S(24)));
-            DrawText(g, "Monitor", fonts.BodyStrong, new Rectangle(r.X + S(34), r.Y, S(70), r.Height), th.Text);
+            DrawText(g, AppInfo.Name, fonts.BodyStrong, new Rectangle(r.X + S(34), r.Y, S(80), r.Height), th.Text);
             int ago = (int)Math.Max(0, (DateTime.Now - lastData).TotalSeconds) + 1;
-            DrawText(g, "Actualizado hace " + ago + " s", fCaption12, new Rectangle(r.X + S(104), r.Y, S(200), r.Height), Secondary);
+            DrawText(g, "Actualizado hace " + ago + " s", fCaption12, new Rectangle(r.X + S(120), r.Y, S(200), r.Height), Secondary);
             var open = SubtleButton(g, "open", new Rectangle(r.Right - S(32), r.Y, S(32), S(28)), Glyphs.OpenExternal, null, "Abrir ventana principal", () => host.OpenMain(null));
             var pin = SubtleButton(g, "pin", new Rectangle(r.Right - S(68), r.Y, S(32), S(28)), pinned ? Glyphs.Unpin : Glyphs.Pin, null,
                 pinned ? "Dejar de fijar (se cierra al hacer clic afuera)" : "Fijar expandida", () => { pinned = !pinned; Invalidate(); });

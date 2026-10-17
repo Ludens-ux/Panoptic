@@ -11,7 +11,7 @@ using System.Text;
 using System.Threading;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     // ====================================================================== conexiones de red
 
@@ -522,7 +522,7 @@ namespace SysMonitor
         HashSet<string> listeners;
         FileSystemWatcher wbWatcher;
         readonly object wbGate = new object();
-        static readonly string DataDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SysMonitor");
+        static readonly string DataDir = System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Panoptic");
         public static string WriteBlockerLog
         {
             get { return System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "WriteBlocker", "actividad.log"); }

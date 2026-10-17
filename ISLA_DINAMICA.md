@@ -1,8 +1,8 @@
 # Isla dinámica — especificación para implementar
 
-Rediseño del widget de `Monitor del sistema` (C#, WinForms, .NET Framework 4.8) como una **isla dinámica** al estilo Windows 11. La referencia visual es `Isla Monitor.dc.html` (opciones 1a, 1b y 1c).
+Rediseño del widget de `Panoptic` (antes "Monitor del sistema") (C#, WinForms, .NET Framework 4.8) como una **isla dinámica** al estilo Windows 11. La referencia visual es `Isla Monitor.dc.html` (opciones 1a, 1b y 1c).
 
-> **Para Claude Code:** implementá esto dentro del proyecto existente. Respetá la arquitectura actual: `Surface` (pintado en modo inmediato con `Hit`), `Theme`, `ResColors`, `Native.SetBackdrop`, `Settings` y el registro `Software\SysMonitor`. No agregues dependencias (nada de WPF/WinUI/NuGet): todo tiene que seguir compilando con `build.ps1`.
+> **Para Claude Code:** implementá esto dentro del proyecto existente. Respetá la arquitectura actual: `Surface` (pintado en modo inmediato con `Hit`), `Theme`, `ResColors`, `Native.SetBackdrop`, `Settings` y el registro `Software\Panoptic`. No agregues dependencias (nada de WPF/WinUI/NuGet): todo tiene que seguir compilando con `build.ps1`.
 
 ---
 
@@ -167,7 +167,7 @@ Son eventos que **toman la isla compacta** durante 4–6 s (o hasta que el usuar
 
 ## 7. Configuración (`Settings` + página Configuración)
 
-Agregar estas claves en `Software\SysMonitor`:
+Agregar estas claves en `Software\Panoptic`:
 
 | Clave | Tipo | Predeterminado |
 |---|---|---|
@@ -190,7 +190,7 @@ Mismo diseño con los valores de `Theme` en claro: el tinte, el borde, los texto
 
 ## 9. Vista previa / pruebas
 
-- Extender `Preview` (`Monitor.exe --render carpeta [dark|light]`) para que genere `isla-compacta.png`, `isla-expandida.png`, `isla-barra.png` y una captura por cada estado contextual, con los datos de ejemplo de `DemoHost`.
+- Extender `Preview` (`Panoptic.exe --render carpeta [dark|light]`) para que genere `isla-compacta.png`, `isla-expandida.png`, `isla-barra.png` y una captura por cada estado contextual, con los datos de ejemplo de `DemoHost`.
 - Comparar visualmente con `Isla Monitor.dc.html`.
 
 ## 10. Criterios de aceptación

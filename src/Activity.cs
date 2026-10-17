@@ -10,7 +10,7 @@ using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal enum Category { Programa, Dispositivo, Red, Energia, Sesion, Sistema, Alerta, Monitor, Inicio, Servicio, Bloqueo, Seguridad }
     internal enum Severity { Info, Advertencia, Error }
@@ -37,7 +37,7 @@ namespace SysMonitor
                 case Category.Servicio: return "Servicios";
                 case Category.Bloqueo: return "WriteBlocker";
                 case Category.Seguridad: return "Seguridad";
-                default: return "Monitor";
+                default: return "Panoptic";
             }
         }
 
@@ -75,7 +75,7 @@ namespace SysMonitor
             get
             {
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "SysMonitor", "registro.log");
+                    "Panoptic", "registro.log");
             }
         }
 
@@ -161,7 +161,7 @@ namespace SysMonitor
             "SecurityHealthHost", "AggregatorHost", "SgrmBroker", "csc", "cvtres", "SDXHelper", "OfficeClickToRun",
             "crashpad_handler", "chrome_crashpad_handler", "identity_helper", "msedge_proxy", "fontdrvhost", "dwm",
             "upfc", "SppExtComObj", "sppsvc", "DeviceCensus", "CompatTelRunner", "DismHost", "MusNotification",
-            "MusNotifyIcon", "GameBarPresenceWriter", "PhoneExperienceHost", "CrossDeviceResume", "SysMonitor"
+            "MusNotifyIcon", "GameBarPresenceWriter", "PhoneExperienceHost", "CrossDeviceResume", "Panoptic"
         };
 
         IntPtr notification;
@@ -174,7 +174,7 @@ namespace SysMonitor
         public SystemWatcher(Sampler sampler)
         {
             var cp = new CreateParams();
-            cp.Caption = "SysMonitor.Watcher";
+            cp.Caption = "Panoptic.Watcher";
             CreateHandle(cp);
 
             var f = new Native.DEV_BROADCAST_DEVICEINTERFACE();

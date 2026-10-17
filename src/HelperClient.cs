@@ -9,7 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal sealed class NetTraffic { public double SentBps, RecvBps; public long SentTotal, RecvTotal; }
     internal sealed class FileStat { public int Pid; public string Path; public double ReadBps, WriteBps; public long ReadTotal, WriteTotal; }

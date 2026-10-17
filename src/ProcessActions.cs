@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>
     /// Prioridad, afinidad y firewall de un proceso. Primero se intenta sin privilegios (procesos propios);

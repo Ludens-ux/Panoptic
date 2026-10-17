@@ -8,14 +8,14 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Aplicación de bandeja: ícono con el uso de CPU en vivo, panel, ventana principal y widget.</summary>
     internal sealed class App : ApplicationContext, IHost
     {
-        const string SettingsKey = @"Software\SysMonitor";
+        const string SettingsKey = @"Software\Panoptic";
         const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string RunName = "SysMonitor";
+        const string RunName = "Panoptic";
 
         readonly Sampler sampler;
         readonly HistoryStore history = new HistoryStore();
@@ -52,6 +52,7 @@ namespace SysMonitor
             Activity.Added += OnActivity;
             var up = TimeSpan.FromMilliseconds(Native.GetTickCount64());
             Activity.Info(Category.Monitor, AppInfo.Name + " " + AppInfo.Version + " iniciado. Windows está encendido desde hace " + Format.Duration(up) + ".");
+            ReactivateHelperAfterRename();
 
             tray.MouseClick += OnTrayClick;
             tray.MouseDown += (o, e) =>
@@ -83,7 +84,7 @@ namespace SysMonitor
                 if ((k.GetValue("WidgetVisible") as int? ?? 0) == 1) ShowWidget();
             }
             if (!startInTray) OpenMain(null);
-            string profPage = Environment.GetEnvironmentVariable("SYSMON_PROFILE_PAGE");
+            string profPage = Environment.GetEnvironmentVariable("PANOPTIC_PROFILE_PAGE");
             if (ProfileMode && !string.IsNullOrEmpty(profPage)) OpenMain(profPage);
         }
 
@@ -100,7 +101,7 @@ namespace SysMonitor
 
         // ------------------------------------------------------------------ IHost
 
-        /// <summary>Modo de medición (variable SYSMON_PROFILE): no modifica la configuración ni los archivos del usuario.</summary>
+        /// <summary>Modo de medición (variable PANOPTIC_PROFILE): no modifica la configuración ni los archivos del usuario.</summary>
         public static bool ProfileMode;
 
         public Snapshot Latest { get { return sampler.Latest; } }
@@ -112,6 +113,24 @@ namespace SysMonitor
         {
             if (!watcher.SetHotkey(Settings.Hotkey))
                 Activity.Add(Category.Monitor, Severity.Advertencia, "El atajo " + Settings.HotkeyNames[Settings.Hotkey] + " ya lo usa otro programa; elegí otro en Configuración.");
+        }
+
+        /// <summary>
+        /// Si la versión anterior (Monitor del sistema) tenía activadas las funciones de administrador, se vuelven a
+        /// instalar con el nombre nuevo: pide permiso una sola vez y borra la tarea vieja.
+        /// </summary>
+        void ReactivateHelperAfterRename()
+        {
+            if (helper == null || !Migration.HelperWasInstalled || helper.Installed) return;
+            System.Threading.ThreadPool.QueueUserWorkItem(o =>
+            {
+                System.Threading.Thread.Sleep(3000);
+                string err;
+                if (helper.SetInstalled(true, out err))
+                    Activity.Info(Category.Seguridad, "Funciones de administrador reactivadas con el nombre nuevo (" + AppInfo.Name + ")");
+                else
+                    Activity.Add(Category.Alerta, Severity.Advertencia, "Las funciones de administrador quedaron desactivadas tras el cambio de nombre: activalas en Configuración. " + err);
+            });
         }
 
         public void WidgetChanged()

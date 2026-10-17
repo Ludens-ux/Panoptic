@@ -5,7 +5,7 @@ using System.Drawing.Drawing2D;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Tabla genérica con columnas ordenables, selección, desplazamiento y menú contextual.</summary>
     internal sealed partial class MainWindow

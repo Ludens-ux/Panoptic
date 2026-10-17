@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     internal static class Program
     {
@@ -26,7 +26,7 @@ namespace SysMonitor
 
             bool startInTray = Array.IndexOf(args, "--tray") >= 0;
             string suffix = "";
-            string profile = Environment.GetEnvironmentVariable("SYSMON_PROFILE");
+            string profile = Environment.GetEnvironmentVariable("PANOPTIC_PROFILE");
             if (!string.IsNullOrEmpty(profile))
             {
                 // Modo de medición: corre al lado de la instancia normal, sin tocar archivos ni configuración.
@@ -38,16 +38,17 @@ namespace SysMonitor
                 suffix = ".Profile";
                 StartProfileTimer(profile);
             }
+            if (!App.ProfileMode) Migration.Run();
             bool created;
-            using (var mutex = new Mutex(true, @"Local\SysMonitor.SingleInstance" + suffix, out created))
+            using (var mutex = new Mutex(true, @"Local\Panoptic.SingleInstance" + suffix, out created))
             {
                 if (!created)
                 {
                     // Ya está abierto: mostrar la ventana de la instancia que corre.
-                    try { using (var ev = EventWaitHandle.OpenExisting(@"Local\SysMonitor.Show" + suffix)) ev.Set(); } catch { }
+                    try { using (var ev = EventWaitHandle.OpenExisting(@"Local\Panoptic.Show" + suffix)) ev.Set(); } catch { }
                     return 0;
                 }
-                using (var ev = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\SysMonitor.Show" + suffix))
+                using (var ev = new EventWaitHandle(false, EventResetMode.AutoReset, @"Local\Panoptic.Show" + suffix))
                     Application.Run(new App(ev, startInTray));
                 GC.KeepAlive(mutex);
             }

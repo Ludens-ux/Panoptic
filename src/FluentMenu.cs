@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Menú contextual con el aspecto de los menús de Windows 11.</summary>
     internal static class FluentMenu

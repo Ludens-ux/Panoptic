@@ -6,7 +6,7 @@ using System.Linq;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Ventana principal: Rendimiento, Procesos y Registro, con navegación lateral de Windows 11.</summary>
     internal sealed partial class MainWindow : Surface
@@ -874,7 +874,7 @@ namespace SysMonitor
 
         // ------------------------------------------------------------------ posición guardada
 
-        const string PlacementKey = @"Software\SysMonitor";
+        const string PlacementKey = @"Software\Panoptic";
 
         void RestorePlacement()
         {

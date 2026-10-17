@@ -1,8 +1,10 @@
-# Monitor del sistema
+# Panoptic
 
-**Versión 1.3.2** · Autor: **@villargonza**
+**Versión 1.4.0** · Autor: **@villargonza**
 
 Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. Funciona sin permisos de administrador; las [funciones avanzadas](#funciones-de-administrador) los piden una sola vez.
+
+> Antes se llamaba **Monitor del sistema**. Al abrir Panoptic por primera vez se pasan solos la configuración, el historial, el registro y el inicio con Windows; si las funciones de administrador estaban activas, se reactivan pidiendo permiso una vez.
 
 ![Rendimiento](docs/capturas/rendimiento.png)
 
@@ -60,11 +62,11 @@ Cerrar la ventana no cierra el monitor, que sigue en la bandeja. Para cerrarlo d
 - **Puertos en escucha:** cuando un programa empieza a aceptar conexiones. Se marca si es accesible desde la red.
 - **WriteBlocker:** los eventos del bloqueo de escritura se suman a la misma línea de tiempo.
 
-El registro se guarda en `%LOCALAPPDATA%\SysMonitor\registro.log`.
+El registro se guarda en `%LOCALAPPDATA%\Panoptic\registro.log`.
 
 ### Funciones de administrador
 
-Se activan en **Configuración > Funciones de administrador** (pide permiso una sola vez). Instalan una tarea programada, `SysMonitorHelper`, que inicia `Monitor.exe --helper` con privilegios al iniciar sesión; la ventana sigue sin privilegios y se comunica con el ayudante por un canal que solo acepta al propio `Monitor.exe` del mismo usuario. Desactivar el interruptor quita la tarea. Requiere Windows de 64 bits.
+Se activan en **Configuración > Funciones de administrador** (pide permiso una sola vez). Instalan una tarea programada, `PanopticHelper`, que inicia `Panoptic.exe --helper` con privilegios al iniciar sesión; la ventana sigue sin privilegios y se comunica con el ayudante por un canal que solo acepta al propio `Panoptic.exe` del mismo usuario. Desactivar el interruptor quita la tarea. Requiere Windows de 64 bits.
 
 - **Procesos con línea de comandos:** cada programa que se ejecuta, con su comando completo y el proceso que lo lanzó. Se marcan como sospechosos los ejecutables usados en ataques (mshta, rundll32, certutil…), Office abriendo una consola y PowerShell codificado u oculto.
 - **Seguridad de Windows:** inicios de sesión (y los fallidos, con aviso ante 5 o más en 5 minutos), cuentas creadas, eliminadas o bloqueadas, cambios en grupos de administradores, tareas programadas nuevas y borrado del registro de seguridad. Aparecen con el filtro **Seguridad** del Registro.
@@ -108,4 +110,4 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 
 Usa el compilador de C# que trae Windows (.NET Framework 4.8) y firma el ejecutable con el certificado de @villargonza.
 
-Para revisar el diseño sin tocar el sistema, `Monitor.exe --render carpeta [dark|light]` genera capturas con datos de ejemplo.
+Para revisar el diseño sin tocar el sistema, `Panoptic.exe --render carpeta [dark|light]` genera capturas con datos de ejemplo.

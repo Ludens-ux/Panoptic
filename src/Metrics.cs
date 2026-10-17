@@ -12,7 +12,7 @@ using System.Text;
 using System.Threading;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Historial circular de 60 muestras (un minuto).</summary>
     internal sealed class History

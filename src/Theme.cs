@@ -3,7 +3,7 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Colores de Windows 11 (tokens de WinUI) para el modo del sistema actual.</summary>
     internal sealed class Theme

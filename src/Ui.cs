@@ -7,7 +7,7 @@ using System.Drawing.Text;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace SysMonitor
+namespace Panoptic
 {
     /// <summary>Colores de cada recurso, como en el Administrador de tareas de Windows 11.</summary>
     internal static class ResColors
@@ -151,7 +151,7 @@ namespace SysMonitor
             return bmp;
         }
 
-        // Estadísticas de pintado (solo en el modo de medición SYSMON_PROFILE).
+        // Estadísticas de pintado (solo en el modo de medición PANOPTIC_PROFILE).
         public static readonly Dictionary<string, double[]> PaintStats = new Dictionary<string, double[]>();
         public static bool ProfilePaint;
 

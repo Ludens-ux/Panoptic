@@ -6,12 +6,12 @@ using System.Linq;
 using System.Text;
 using Microsoft.Win32;
 
-namespace SysMonitor
+namespace Panoptic
 {
-    /// <summary>Preferencias del usuario (HKCU\Software\SysMonitor).</summary>
+    /// <summary>Preferencias del usuario (HKCU\Software\Panoptic).</summary>
     internal static class Settings
     {
-        const string Key = @"Software\SysMonitor";
+        const string Key = @"Software\Panoptic";
 
         public static int Get(string name, int def)
         {
@@ -107,7 +107,7 @@ namespace SysMonitor
     {
         public static string FilePath
         {
-            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "SysMonitor", "historial.csv"); }
+            get { return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Panoptic", "historial.csv"); }
         }
 
         readonly object gate = new object();
