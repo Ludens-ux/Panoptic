@@ -85,7 +85,7 @@ namespace SysMonitor
 
         void PaintHistory(Graphics g, Rectangle c)
         {
-            PageTitle(g, c, "Historial", "Promedio de cada minuto · se conservan " + Settings.HistoryDays + " días · " + HistoryStore.FilePath);
+            PageTitle(g, c, "Historial", "Promedio de cada minuto · se conservan " + Settings.HistoryDays + " días · " + ShownPath(HistoryStore.FilePath));
             int used = Chips(g, c.X + S(24), c.Y + S(72), c.Right - S(24), "hist", new[] { "Última hora", "Últimas 24 horas", "Últimos 7 días" }, historyRange, i => historyRange = i);
             TimeSpan span = historyRange == 0 ? TimeSpan.FromHours(1) : historyRange == 1 ? TimeSpan.FromHours(24) : TimeSpan.FromDays(7);
             var to = DateTime.Now;
@@ -500,6 +500,13 @@ namespace SysMonitor
 
         bool helperBusy;
 
+        /// <summary>Ruta abreviada con %LOCALAPPDATA% (más corta y sin el nombre del usuario).</summary>
+        static string ShownPath(string path)
+        {
+            string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            return path.StartsWith(local, StringComparison.OrdinalIgnoreCase) ? "%LOCALAPPDATA%" + path.Substring(local.Length) : path;
+        }
+
         void PaintSettings(Graphics g, Rectangle c)
         {
             PageTitle(g, c, "Configuración", null);
@@ -690,7 +697,7 @@ namespace SysMonitor
             stepper(Glyphs.History, "Conservar historial", "Días de historial de rendimiento guardados", Settings.HistoryDays + (Settings.HistoryDays == 1 ? " día" : " días"),
                 () => Settings.HistoryDays = clamp(Settings.HistoryDays - 1, 1, 30), () => Settings.HistoryDays = clamp(Settings.HistoryDays + 1, 1, 30));
             {
-                var cr = SettingCard(g, new Rectangle(x, y, w, rowH), Glyphs.Folder, "Carpeta de datos", System.IO.Path.GetDirectoryName(HistoryStore.FilePath), S(120));
+                var cr = SettingCard(g, new Rectangle(x, y, w, rowH), Glyphs.Folder, "Carpeta de datos", ShownPath(System.IO.Path.GetDirectoryName(HistoryStore.FilePath)), S(120));
                 StandardButton(g, "datafolder", new Rectangle(cr.Right - S(120), cr.Y + (cr.Height - S(32)) / 2, S(120), S(32)), null, "Abrir", false, true,
                     () => { try { Process.Start("explorer.exe", "\"" + System.IO.Path.GetDirectoryName(HistoryStore.FilePath) + "\""); } catch { } });
                 y += rowH + gap;

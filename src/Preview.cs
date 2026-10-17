@@ -73,11 +73,11 @@ namespace SysMonitor
         static void Seed()
         {
             Activity.MemoryOnly = true;
-            Activity.Info(Category.Monitor, "Monitor del sistema 1.0.0 iniciado. Windows está encendido desde hace 3 h 12 min.");
+            Activity.Info(Category.Monitor, "Monitor del sistema " + AppInfo.Version + " iniciado. Windows está encendido desde hace 3 h 12 min.");
             Activity.Info(Category.Red, "Conectado a Wi-Fi \"Casa\", IP 192.168.0.24");
             Activity.Info(Category.Programa, "Se abrió Google Chrome (chrome.exe, PID 10420)");
             Activity.Info(Category.Dispositivo, "Se conectó Kingston DataTraveler 3.0");
-            Activity.Info(Category.Dispositivo, "Unidad disponible: D: (Luden5, exFAT, 115 GB)");
+            Activity.Info(Category.Dispositivo, "Unidad disponible: D: (PENDRIVE, exFAT, 115 GB)");
             Activity.Add(Category.Alerta, Severity.Advertencia, "CPU por encima del 90 % durante 15 segundos (más uso: Google Chrome, 72 %)");
             Activity.Add(Category.Sistema, Severity.Error, "Un programa se cerró inesperadamente: Nombre de la aplicación con errores: Spotify.exe (evento 1000)");
             Activity.Info(Category.Sesion, "Sesión bloqueada");
@@ -109,11 +109,52 @@ namespace SysMonitor
                 }
                 return;
             }
+            if (c is MainWindow)
+            {
+                // Sin el marco clásico que dibuja DrawToBitmap: barra de título de Windows 11 dibujada aparte.
+                using (var client = ((Surface)c).RenderToBitmap())
+                using (var bmp = Windows11Frame(client, th)) bmp.Save(path, ImageFormat.Png);
+                return;
+            }
             using (var bmp = new Bitmap(c.Width, c.Height))
             {
                 c.DrawToBitmap(bmp, new Rectangle(Point.Empty, c.Size));
                 bmp.Save(path, ImageFormat.Png);
             }
+        }
+
+        /// <summary>Ventana de Windows 11 alrededor de una captura: barra de título, esquinas redondeadas y borde.</summary>
+        static Bitmap Windows11Frame(Bitmap client, Theme th)
+        {
+            const int bar = 32, radius = 8;
+            var bmp = new Bitmap(client.Width, client.Height + bar, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.Clear(Color.Transparent);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                var all = new RectangleF(0, 0, bmp.Width - 1, bmp.Height - 1);
+                using (var shape = Theme.Round(all, radius))
+                {
+                    g.SetClip(shape);
+                    using (var b = new SolidBrush(th.Clear)) g.FillRectangle(b, 0, 0, bmp.Width, bar);
+                    g.DrawImageUnscaled(client, 0, bar);
+                    using (var icon = TrayIcon.DrawApp(16)) g.DrawImageUnscaled(icon, 14, (bar - 16) / 2);
+                    using (var f = new Font(Fonts.TextFamily, 12f, GraphicsUnit.Pixel))
+                    using (var b = new SolidBrush(th.Text))
+                    using (var sf = new StringFormat { LineAlignment = StringAlignment.Center })
+                        g.DrawString(AppInfo.Name, f, b, new RectangleF(42, 0, 300, bar), sf);
+                    string[] caption = { "", "", "" };
+                    using (var f = new Font(Fonts.IconFamily, 10f, GraphicsUnit.Pixel))
+                    using (var b = new SolidBrush(th.Text))
+                    using (var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+                        for (int i = 0; i < 3; i++)
+                            g.DrawString(caption[i], f, b, new RectangleF(bmp.Width - (3 - i) * 46, 0, 46, bar), sf);
+                    g.ResetClip();
+                    using (var pen = new Pen(th.Dark ? Color.FromArgb(70, 255, 255, 255) : Color.FromArgb(40, 0, 0, 0))) g.DrawPath(pen, shape);
+                }
+            }
+            return bmp;
         }
 
         public static int Render(string[] args)
@@ -174,7 +215,7 @@ namespace SysMonitor
             {
                 w.CreateControl();
                 var h = w.Handle;
-                w.Size = w.ClientSize;
+                w.Relayout();
                 Save(w, System.IO.Path.Combine(dir, "widget.png"));
             }
             foreach (var page in new[] { "perf", "procs", "log", "hist", "net", "net-scroll", "files", "startup", "services", "settings" })

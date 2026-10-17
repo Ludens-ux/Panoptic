@@ -2,7 +2,21 @@
 
 **Versión 1.3.2** · Autor: **@villargonza**
 
-Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. No requiere permisos de administrador.
+Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. Funciona sin permisos de administrador; las [funciones avanzadas](#funciones-de-administrador) los piden una sola vez.
+
+![Rendimiento](docs/capturas/rendimiento.png)
+
+| Procesos | Historial |
+|---|---|
+| ![Procesos](docs/capturas/procesos.png) | ![Historial](docs/capturas/historial.png) |
+| **Registro de actividad** | **Configuración** |
+| ![Registro](docs/capturas/registro.png) | ![Configuración](docs/capturas/configuracion.png) |
+
+| Isla dinámica | Widget | Panel de la bandeja |
+|---|---|---|
+| ![Isla expandida](docs/capturas/isla-expandida.png)<br><br>![Isla compacta](docs/capturas/isla-compacta.png) | ![Widget](docs/capturas/widget.png) | ![Panel de la bandeja](docs/capturas/bandeja.png) |
+
+*Capturas con datos de demostración.*
 
 ## Uso
 
