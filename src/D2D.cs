@@ -49,6 +49,8 @@ namespace Panoptic
         // ID2D1RenderTarget
         delegate int CreateBitmapFn(IntPtr self, SizeU size, IntPtr data, uint pitch, ref BitmapProps p, out IntPtr bmp); // 4
         delegate int CreateSolidColorBrushFn(IntPtr self, ref ColorF c, IntPtr props, out IntPtr brush);   // 8
+        delegate void DrawLineFn(IntPtr self, PointF2 p0, PointF2 p1, IntPtr brush, float w, IntPtr style); // 15
+        delegate void FillEllipseFn(IntPtr self, ref EllipseF e, IntPtr brush);                             // 21
         delegate void FillRectangleFn(IntPtr self, ref RectF r, IntPtr brush);                              // 17
         delegate void DrawRoundedRectangleFn(IntPtr self, ref RoundedRect r, IntPtr brush, float w, IntPtr style); // 18
         delegate void FillRoundedRectangleFn(IntPtr self, ref RoundedRect r, IntPtr brush);                 // 19
@@ -101,8 +103,14 @@ namespace Panoptic
         static void Check(int hr, string what) { if (hr < 0) throw new InvalidOperationException(what + " falló (0x" + hr.ToString("X8") + ")"); }
 
         // ---------------------------------------------------------------- recursos compartidos
-        static IntPtr factory, dwrite, roundStroke;
+        static IntPtr factory, dwrite, roundStroke, dashStroke, dotStroke;
         static bool unavailable;
+        /// <summary>Desactiva Direct2D en todo el programa (variable de entorno PANOPTIC_NO_GPU=1).</summary>
+        public static bool Disabled;
+        readonly bool opaque;
+        readonly int bitmapLimit;
+
+        D2DPainter(bool opaque, int bitmapLimit) { this.opaque = opaque; this.bitmapLimit = bitmapLimit; }
 
         IntPtr rt, brush;
         Size bound;
@@ -111,9 +119,13 @@ namespace Panoptic
         Matrix current = Identity;
 
         /// <summary>Crea el pintor, o devuelve null si Direct2D no está disponible (escritorio remoto, sin placa de video…).</summary>
-        public static D2DPainter TryCreate()
+        public static D2DPainter TryCreate() { return TryCreate(false, 64); }
+
+        /// <param name="opaque">Ventana sin transparencia: el texto usa ClearType.</param>
+        /// <param name="bitmapLimit">Cuántas imágenes (íconos) se guardan en la placa de video.</param>
+        public static D2DPainter TryCreate(bool opaque, int bitmapLimit)
         {
-            if (unavailable || IntPtr.Size != 8) return null;
+            if (unavailable || Disabled || IntPtr.Size != 8) return null;
             try
             {
                 if (factory == IntPtr.Zero)
@@ -124,8 +136,12 @@ namespace Panoptic
                     Check(DWriteCreateFactory(0, ref iw, out dwrite), "DWriteCreateFactory");
                     var sp = new StrokeProps { StartCap = 2, EndCap = 2, DashCap = 0, LineJoin = 2, MiterLimit = 10 };
                     Check(Fn<CreateStrokeStyleFn>(factory, 11)(factory, ref sp, IntPtr.Zero, 0, out roundStroke), "CreateStrokeStyle");
+                    var dp = new StrokeProps { MiterLimit = 10, DashStyle = 1 };
+                    Check(Fn<CreateStrokeStyleFn>(factory, 11)(factory, ref dp, IntPtr.Zero, 0, out dashStroke), "CreateStrokeStyle");
+                    var op = new StrokeProps { MiterLimit = 10, DashStyle = 2 };
+                    Check(Fn<CreateStrokeStyleFn>(factory, 11)(factory, ref op, IntPtr.Zero, 0, out dotStroke), "CreateStrokeStyle");
                 }
-                var p = new D2DPainter();
+                var p = new D2DPainter(opaque, bitmapLimit);
                 p.CreateTarget();
                 return p;
             }
@@ -137,13 +153,13 @@ namespace Panoptic
             var props = new RTProps
             {
                 Type = 0,                                                                  // por placa de video si se puede
-                PixelFormat = new PixelFormat2 { Format = 87, AlphaMode = 1 },            // B8G8R8A8, alfa premultiplicado
+                PixelFormat = new PixelFormat2 { Format = 87, AlphaMode = opaque ? 3 : 1 }, // B8G8R8A8: opaco o alfa premultiplicado
                 DpiX = 96, DpiY = 96                                                       // 1 unidad = 1 píxel
             };
             Check(Fn<CreateDCRenderTargetFn>(factory, 16)(factory, ref props, out rt), "CreateDCRenderTarget");
             var c = new ColorF { A = 1 };
             Check(Fn<CreateSolidColorBrushFn>(rt, 8)(rt, ref c, IntPtr.Zero, out brush), "CreateSolidColorBrush");
-            Fn<SetModeFn>(rt, 34)(rt, 2);   // texto en escala de grises: ClearType no funciona sobre transparencia
+            Fn<SetModeFn>(rt, 34)(rt, opaque ? 1 : 2);   // ClearType en ventanas opacas; escala de grises sobre transparencia
             bound = Size.Empty;
         }
 
@@ -193,6 +209,30 @@ namespace Panoptic
 
         public void Clear(Color c) { var f = ToF(c); Fn<ClearFn>(rt, 47)(rt, ref f); }
 
+        /// <summary>Rellena reemplazando los píxeles (sin mezclar): sirve para "borrar" con transparencia.</summary>
+        public void FillCopy(RectangleF r, Color c)
+        {
+            PushClip(r);
+            Clear(c);
+            PopClip();
+        }
+
+        /// <param name="dash">0 continua, 1 a rayas, 2 punteada.</param>
+        public void Line(float x1, float y1, float x2, float y2, Color c, float width, int dash)
+        {
+            if (c.A == 0) return;
+            Fn<DrawLineFn>(rt, 15)(rt, new PointF2 { X = x1, Y = y1 }, new PointF2 { X = x2, Y = y2 }, Brush(c), width, Style(dash));
+        }
+
+        static IntPtr Style(int dash) { return dash == 1 ? dashStroke : dash == 2 ? dotStroke : IntPtr.Zero; }
+
+        public void FillEllipse(RectangleF r, Color c)
+        {
+            if (c.A == 0) return;
+            var e = new EllipseF { Center = new PointF2 { X = r.X + r.Width / 2, Y = r.Y + r.Height / 2 }, RX = r.Width / 2, RY = r.Height / 2 };
+            Fn<FillEllipseFn>(rt, 21)(rt, ref e, Brush(c));
+        }
+
         public void FillRect(RectangleF r, Color c)
         {
             if (c.A == 0) return;
@@ -241,10 +281,12 @@ namespace Panoptic
         }
 
         /// <summary>Línea quebrada con uniones redondeadas.</summary>
-        public void Polyline(PointF[] pts, Color c, float width)
+        public void Polyline(PointF[] pts, Color c, float width) { Polyline(pts, c, width, 0); }
+
+        public void Polyline(PointF[] pts, Color c, float width, int dash)
         {
             if (pts == null || pts.Length < 2) return;
-            WithPath(sink => Figure(sink, pts, 1, 0), geo => Fn<DrawGeometryFn>(rt, 22)(rt, geo, Brush(c), width, roundStroke));
+            WithPath(sink => Figure(sink, pts, 1, 0), geo => Fn<DrawGeometryFn>(rt, 22)(rt, geo, Brush(c), width, dash == 0 ? roundStroke : Style(dash)));
         }
 
         public void FillPolygon(PointF[] pts, Color c)
@@ -285,7 +327,7 @@ namespace Panoptic
             IntPtr bmp;
             if (!bitmaps.TryGetValue(src, out bmp))
             {
-                if (bitmaps.Count > 64) { foreach (var b in bitmaps.Values) { var x = b; Release(ref x); } bitmaps.Clear(); }
+                if (bitmaps.Count > bitmapLimit) { foreach (var b in bitmaps.Values) { var x = b; Release(ref x); } bitmaps.Clear(); }
                 var data = src.LockBits(new Rectangle(0, 0, src.Width, src.Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppPArgb);
                 try
                 {

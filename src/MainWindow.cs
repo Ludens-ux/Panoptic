@@ -111,6 +111,9 @@ namespace Panoptic
 
         protected override int Backdrop { get { return Native.DWMSBT_MICA; } }
 
+        /// <summary>La ventana principal se dibuja con la placa de video (Direct2D); si no se puede, con GDI+.</summary>
+        protected override bool UseGpu { get { return true; } }
+
         protected override void OnScaleChanged()
         {
             search.Font = fonts.Body;
@@ -173,20 +176,20 @@ namespace Panoptic
             // Esquina superior izquierda redondeada de la capa (área de contenido de Windows 11).
             int rad = S(8);
             FastFill(g, new Rectangle(content.X, content.Y, rad, rad), th.Clear);
-            using (var p = new GraphicsPath())
+            // El cuarto de círculo de la esquina como polígono (sirve igual con GDI+ y con Direct2D).
+            var corner = new PointF[11];
+            corner[0] = new PointF(content.X + rad, content.Y + rad);
+            for (int i = 0; i <= 9; i++)
             {
-                p.AddArc(content.X, content.Y, 2 * rad, 2 * rad, 180, 90);
-                p.AddLine(content.X + rad, content.Y, content.X + rad, content.Y + rad);
-                p.AddLine(content.X + rad, content.Y + rad, content.X, content.Y + rad);
-                p.CloseFigure();
-                using (var b = new SolidBrush(th.Layer)) g.FillPath(b, p);
+                double a = Math.PI + Math.PI / 2 * i / 9;
+                corner[i + 1] = new PointF(content.X + rad + rad * (float)Math.Cos(a), content.Y + rad + rad * (float)Math.Sin(a));
             }
-            using (var pen = new Pen(th.LayerStroke))
-            {
-                g.DrawArc(pen, content.X + .5f, content.Y + .5f, 2 * rad, 2 * rad, 180, 90);
-                g.DrawLine(pen, content.X + rad, content.Y + .5f, content.Right, content.Y + .5f);
-                g.DrawLine(pen, content.X + .5f, content.Y + rad, content.X + .5f, content.Bottom);
-            }
+            AreaP(g, corner, th.Layer);
+            var edge = new PointF[10];
+            for (int i = 0; i < 10; i++) edge[i] = new PointF(corner[i + 1].X + .5f, corner[i + 1].Y + .5f);
+            LinesP(g, edge, th.LayerStroke, 1);
+            LineP(g, th.LayerStroke, 1, content.X + rad, content.Y + .5f, content.Right, content.Y + .5f);
+            LineP(g, th.LayerStroke, 1, content.X + .5f, content.Y + rad, content.X + .5f, content.Bottom);
             Stat("1 fondo", psw);
             PaintNav(g, navW);
             Stat("2 nav", psw);
@@ -203,9 +206,8 @@ namespace Panoptic
             }
             // Entrada de página: sube unos píxeles y aparece con un fundido (se puede interrumpir con otro clic).
             float enter = Spring("page-enter", 1f, 0.42f, 0.88f);
-            var pageState = g.Save();
-            g.SetClip(content, CombineMode.Intersect);
-            if (enter < 0.999f) g.TranslateTransform(0, (float)Math.Round((1 - enter) * S(28)));
+            var pageState = ClipP(g, content);
+            if (enter < 0.999f) TranslateP(g, pageState, 0, (float)Math.Round((1 - enter) * S(28)));
             if (page == "perf") PaintPerformance(g, content, snap);
             else if (page == "procs") PaintProcesses(g, content, snap);
             else if (page == "hist") PaintHistory(g, content);
@@ -217,11 +219,11 @@ namespace Panoptic
             else if (page == "services") PaintServices(g, content);
             else if (page == "settings") PaintSettings(g, content);
             else PaintLog(g, content);
-            g.Restore(pageState);
+            UnclipP(g, pageState);
             if (enter < 0.999f)
             {
                 int a = (int)(255 * Math.Max(0, 1 - enter * 1.6f));
-                if (a > 0) using (var b = new SolidBrush(Color.FromArgb(a, th.Layer.R, th.Layer.G, th.Layer.B))) g.FillRectangle(b, new Rectangle(content.X + 1, content.Y + 1, content.Width - 1, content.Height - 1));
+                if (a > 0) FillRoundP(g, new Rectangle(content.X + 1, content.Y + 1, content.Width - 1, content.Height - 1), 0, Color.FromArgb(a, th.Layer.R, th.Layer.G, th.Layer.B));
             }
             Stat("4 pagina", psw);
         }
@@ -292,10 +294,9 @@ namespace Panoptic
             if (navW >= S(100))
             {
                 var tr = new Rectangle(r.X + S(44), r.Y, r.Width - S(48), r.Height);
-                var cs = g.Save();
-                g.SetClip(tr, System.Drawing.Drawing2D.CombineMode.Intersect);
+                var cs = ClipP(g, tr);
                 DrawText(g, label, fonts.Body, new Rectangle(tr.X, tr.Y, Math.Max(tr.Width, S(160)), tr.Height), th.Text);
-                g.Restore(cs);
+                UnclipP(g, cs);
             }
             EndScale(g, st, sc);
             y += S(44);
@@ -342,7 +343,7 @@ namespace Panoptic
                 HoverFill(g, key, r, S(4));
                 if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
                 var gr = new Rectangle(r.X + S(12), r.Y + S(10), S(64), S(40));
-                using (var b = new SolidBrush(th.GraphBg)) g.FillRectangle(b, gr);
+                FillRoundP(g, gr, 0, th.GraphBg);
                 Graph(g, gr, it.Item4, it.Item5, it.Item6, false, true);
                 DrawText(g, it.Item2, fonts.Body, new Rectangle(gr.Right + S(12), r.Y + S(11), r.Width - S(96), S(20)), th.Text);
                 DrawText(g, it.Item3, fonts.Caption, new Rectangle(gr.Right + S(12), r.Y + S(31), r.Width - S(96), S(18)), th.TextSecondary);
@@ -379,7 +380,7 @@ namespace Panoptic
             DrawText(g, label, fonts.Caption, new Rectangle(r.X, y, r.Width / 2, S(18)), th.TextSecondary);
             DrawText(g, max, fonts.Caption, new Rectangle(r.X + r.Width / 2, y, r.Width / 2, S(18)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
             var gr = new Rectangle(r.X, y + S(20), r.Width, height);
-            using (var b = new SolidBrush(th.GraphBg)) g.FillRectangle(b, gr);
+            FillRoundP(g, gr, 0, th.GraphBg);
             Graph(g, gr, values, vmax, c, true, true);
             if (second != null)
             {
@@ -387,7 +388,7 @@ namespace Panoptic
                 var pts = new PointF[second.Length];
                 for (int i = 0; i < second.Length; i++)
                     pts[i] = new PointF(gr.X + 1 + (gr.Width - 2f) * i / (second.Length - 1), gr.Bottom - 1 - (gr.Height - 2f) * Math.Min(vmax, second[i]) / vmax);
-                using (var pen = new Pen(c, Math.Max(1.2f, 1.5f * s))) { pen.DashStyle = DashStyle.Dash; g.DrawLines(pen, pts); }
+                LinesP(g, pts, c, Math.Max(1.2f, 1.5f * s), 1);
             }
             DrawText(g, "60 segundos", fonts.Caption, new Rectangle(r.X, gr.Bottom + S(2), r.Width / 2, S(18)), th.TextSecondary);
             DrawText(g, "0", fonts.Caption, new Rectangle(r.X + r.Width / 2, gr.Bottom + S(2), r.Width / 2, S(18)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
@@ -520,11 +521,7 @@ namespace Panoptic
             bool focused = search.Focused;
             Color fill = focused ? (th.Dark ? Theme.Hex(0x1F1F1F) : Theme.Hex(0xFFFFFF)) : (th.Dark ? Theme.Hex(0x2D2D2D) : Theme.Hex(0xFBFBFB));
             search.BackColor = fill;
-            using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), S(4)))
-            {
-                using (var b = new SolidBrush(fill)) g.FillPath(b, p);
-                using (var pen = new Pen(ControlStroke)) g.DrawPath(pen, p);
-            }
+            { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, S(4), fill); StrokeRoundP(g, rr, S(4), ControlStroke, 1f); }
             // Línea inferior de acento cuando tiene el foco, como los cuadros de texto de Windows 11.
             if (focused) Fill(g, new Rectangle(r.X + S(1), r.Bottom - S(2), r.Width - S(2), S(2)), th.Accent, S(1));
             Glyph(g, Glyphs.Search, fonts.Glyph12, new Rectangle(r.Right - S(32), r.Y, S(24), r.Height), th.TextSecondary);
@@ -640,8 +637,7 @@ namespace Panoptic
             Header(g, cols[5], hy, "GPU", "gpu", true, snap.GpuAvailable ? Format.Percent(snap.Gpu) : null);
             Header(g, cols[4], hy, "PID", "pid", true, null);
             if (NetColumn) Header(g, cols[6], hy, "Red", "net", true, Format.Bits(snap.Procs.Sum(p => NetRate(p.Pid))));
-            using (var pen = new Pen(ControlStroke))
-                g.DrawLine(pen, c.X + S(12), hy + S(48), c.Right - S(12), hy + S(48));
+            LineP(g, ControlStroke, 1, c.X + S(12), hy + S(48), c.Right - S(12), hy + S(48));
 
             listView = new Rectangle(c.X, hy + S(49), c.Width, c.Bottom - hy - S(49));
             string q = Query;
@@ -655,12 +651,11 @@ namespace Panoptic
             int rowH = S(32);
             listContent = S(40) * 2 + (apps.Count + bg.Count) * rowH + S(8);
             ClampScroll();
-            var state = g.Save();
-            g.SetClip(listView);
+            var state = ClipP(g, listView);
             int y = listView.Y - ScrollPos;
             y = Group(g, c, cols, y, "Aplicaciones", apps, rowH, snap);
             y = Group(g, c, cols, y, "Procesos en segundo plano", bg, rowH, snap);
-            g.Restore(state);
+            UnclipP(g, state);
             if (apps.Count + bg.Count == 0)
                 DrawText(g, q.Length > 0 ? "Ningún proceso coincide con \"" + q + "\"" : "Sin procesos", fonts.Body, listView, th.TextSecondary,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -861,8 +856,7 @@ namespace Panoptic
             int days = logDays;
             listContent = entries.Count * rowH + days * dayH + S(8);
             ClampScroll();
-            var state = g.Save();
-            g.SetClip(listView);
+            var state = ClipP(g, listView);
             int y = listView.Y - ScrollPos;
             DateTime? day = null;
             foreach (var e in entries)
@@ -877,7 +871,7 @@ namespace Panoptic
                 if (y + rowH >= listView.Y && y <= listView.Bottom) LogRow(g, new Rectangle(c.X + S(12), y, c.Width - S(36), rowH), e);
                 y += rowH;
             }
-            g.Restore(state);
+            UnclipP(g, state);
             if (entries.Count == 0)
                 DrawText(g, q.Length > 0 || logFilter.HasValue ? "No hay eventos que coincidan" : "Todavía no hay actividad registrada",
                     fonts.Body, listView, th.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -903,12 +897,7 @@ namespace Panoptic
             if (sel) Fill(g, r, IsHover(key) ? th.AccentHover : th.Accent, r.Height / 2f);
             else
             {
-                using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), r.Height / 2f))
-                {
-                    using (var b = new SolidBrush(th.ControlFill)) g.FillPath(b, p);
-                    if (IsHover(key)) using (var b = new SolidBrush(th.HoverOverlay)) g.FillPath(b, p);
-                    using (var pen = new Pen(ControlStroke)) g.DrawPath(pen, p);
-                }
+                { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, r.Height / 2f, th.ControlFill); HoverFill(g, key, Rectangle.Round(rr), r.Height / 2f); StrokeRoundP(g, rr, r.Height / 2f, ControlStroke, 1f); }
             }
             DrawText(g, text, fonts.Body, r, sel ? th.OnAccent : th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             x += w + S(8);

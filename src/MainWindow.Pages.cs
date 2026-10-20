@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -111,8 +111,7 @@ namespace Panoptic
             int chartH = S(176);
             listContent = charts.Count * (chartH + S(12)) + S(8);
             ClampScroll();
-            var state = g.Save();
-            g.SetClip(listView);
+            var state = ClipP(g, listView);
             int y = listView.Y - ScrollPos;
             foreach (var ch in charts)
             {
@@ -120,7 +119,7 @@ namespace Panoptic
                     HistoryChart(g, new Rectangle(c.X + S(24), y, c.Width - S(48), chartH), ch.Item1, pts, ch.Item2, ch.Item3, ch.Item4, ch.Item5, from, to);
                 y += chartH + S(12);
             }
-            g.Restore(state);
+            UnclipP(g, state);
             if (pts.Count == 0)
                 DrawText(g, "Todavía no hay datos guardados para este período. El historial se completa a medida que el monitor está abierto.",
                     fonts.Caption, new Rectangle(c.X + S(24), listView.Y - S(22), c.Width - S(48), S(18)), th.TextSecondary);
@@ -174,29 +173,21 @@ namespace Panoptic
             if (cached.Item4 > 0)
                 DrawText(g, "Promedio " + fmt(cached.Item2) + "   ·   Máximo " + fmt(cached.Item3), fonts.Caption,
                     new Rectangle(r.X + S(280), r.Y + S(10), r.Width - S(296), S(22)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-            using (var b = new SolidBrush(th.GraphBg)) g.FillRectangle(b, gr);
-            using (var pen = new Pen(Color.FromArgb(th.Dark ? 28 : 36, color)))
-                for (int i = 1; i < 4; i++) { int yy = gr.Y + gr.Height * i / 4; g.DrawLine(pen, gr.X, yy, gr.Right, yy); }
+            FillRoundP(g, gr, 0, th.GraphBg);
+            for (int i = 1; i < 4; i++) { int yy = gr.Y + gr.Height * i / 4; LineP(g, Color.FromArgb(th.Dark ? 28 : 36, color), 1, gr.X, yy, gr.Right, yy); }
 
-            var st = g.Save();
-            g.SetClip(Rectangle.Intersect(gr, listView));
+            var st = ClipP(g, Rectangle.Intersect(gr, listView));
             var seg = new List<PointF>();
             Action flush = () =>
             {
                 if (seg.Count >= 2)
                 {
-                    using (var path = new GraphicsPath())
-                    {
-                        path.AddLine(seg[0].X, gr.Bottom, seg[0].X, seg[0].Y);
-                        path.AddLines(seg.ToArray());
-                        path.AddLine(seg[seg.Count - 1].X, seg[seg.Count - 1].Y, seg[seg.Count - 1].X, gr.Bottom);
-                        path.CloseFigure();
-                        using (var b = new SolidBrush(Color.FromArgb(th.Dark ? 60 : 45, color))) g.FillPath(b, path);
-                    }
-                    using (var pen = new Pen(color, Math.Max(1.2f, 1.5f * s))) { pen.LineJoin = LineJoin.Round; g.DrawLines(pen, seg.ToArray()); }
+                    var line = seg.ToArray();
+                    AreaP(g, UnderArea(line, gr.Bottom), Color.FromArgb(th.Dark ? 60 : 45, color));
+                    LinesP(g, line, color, Math.Max(1.2f, 1.5f * s));
                 }
                 else if (seg.Count == 1)
-                    using (var b = new SolidBrush(color)) g.FillEllipse(b, seg[0].X - 2 * s, seg[0].Y - 2 * s, 4 * s, 4 * s);
+                    FillEllipseP(g, new RectangleF(seg[0].X - 2 * s, seg[0].Y - 2 * s, 4 * s, 4 * s), color);
                 seg.Clear();
             };
             for (int i = 0; i < cols; i++)
@@ -212,7 +203,7 @@ namespace Panoptic
             if (gr.Contains(mouse) && listView.Contains(mouse))
             {
                 int i = Math.Max(0, Math.Min(cols - 1, mouse.X - gr.X));
-                using (var pen = new Pen(th.TextSecondary, 1)) { pen.DashStyle = DashStyle.Dot; g.DrawLine(pen, mouse.X, gr.Y, mouse.X, gr.Bottom); }
+                LineP(g, th.TextSecondary, 1, mouse.X, gr.Y, mouse.X, gr.Bottom, 2);
                 var t = from.AddSeconds(total * i / (cols - 1));
                 string label = t.ToString(historyRange == 2 ? "ddd d HH:mm" : "HH:mm", Format.Es) + "   " + (float.IsNaN(series[i]) ? "sin datos" : fmt(series[i]));
                 int lw = MeasureText(label, fonts.Caption) + S(16);
@@ -220,7 +211,7 @@ namespace Panoptic
                 Fill(g, lr, th.Dark ? Color.FromArgb(235, 44, 44, 44) : Color.FromArgb(240, 252, 252, 252), S(4));
                 DrawText(g, label, fonts.Caption, lr, th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
-            g.Restore(st);
+            UnclipP(g, st);
 
             // Eje de tiempo
             string f = historyRange == 2 ? "ddd d" : "HH:mm";
@@ -511,8 +502,7 @@ namespace Panoptic
         {
             PageTitle(g, c, "Configuración", null);
             listView = new Rectangle(c.X, c.Y + S(60), c.Width, c.Bottom - c.Y - S(60));
-            var state = g.Save();
-            g.SetClip(listView);
+            var state = ClipP(g, listView);
             int x = c.X + S(24), w = Math.Min(c.Width - S(48), S(900));
             int y = listView.Y - ScrollPos;
             int rowH = S(68), gap = S(4);
@@ -616,8 +606,7 @@ namespace Panoptic
                     HoverFill(g, key, r, S(4));
                     var box = new Rectangle(r.X + S(6), r.Y + (r.Height - S(18)) / 2, S(18), S(18));
                     if (on) { Fill(g, box, th.Accent, S(3)); Glyph(g, Glyphs.CheckMark, fonts.Glyph12, box, th.OnAccent); }
-                    else using (var p = Theme.Round(new RectangleF(box.X + .5f, box.Y + .5f, box.Width - 1, box.Height - 1), S(3)))
-                        using (var pen = new Pen(th.ToggleOffStroke)) g.DrawPath(pen, p);
+                    else StrokeRoundP(g, new RectangleF(box.X + .5f, box.Y + .5f, box.Width - 1, box.Height - 1), S(3), th.ToggleOffStroke, 1f);
                     DrawText(g, Settings.WidgetRingNames[i], fonts.Body, new Rectangle(box.Right + S(8), r.Y, r.Width - S(32), r.Height), th.Text);
                     cx += bw + S(8);
                 }
@@ -734,7 +723,7 @@ namespace Panoptic
             linkCard(Glyphs.Globe, "Código fuente", AppInfo.Repo.Replace("https://", ""), "about-repo", "Abrir en GitHub", () => AppInfo.Open(AppInfo.Repo));
 
             listContent = y + ScrollPos - listView.Y + S(16);
-            g.Restore(state);
+            UnclipP(g, state);
             ClampScroll();
             DrawScrollbar(g);
         }

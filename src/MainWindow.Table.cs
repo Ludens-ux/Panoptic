@@ -83,7 +83,7 @@ namespace Panoptic
                 if (sortCol == i)
                     Glyph(g, asc ? Glyphs.ChevronUp : Glyphs.ChevronDown, fonts.Glyph12, new Rectangle(r.X + r.Width / 2 - S(8), r.Y + S(1), S(16), S(10)), th.TextSecondary);
             }
-            using (var pen = new Pen(ControlStroke)) g.DrawLine(pen, area.X + S(12), hy + S(36), area.Right - S(12), hy + S(36));
+            LineP(g, ControlStroke, 1, area.X + S(12), hy + S(36), area.Right - S(12), hy + S(36));
 
             // Orden
             var c0 = cols[Math.Min(sortCol, cols.Count - 1)];
@@ -96,8 +96,7 @@ namespace Panoptic
             ClampScroll();
             string sel = Selected(id);
             object selected = null;
-            var state = g.Save();
-            g.SetClip(listView);
+            var state = ClipP(g, listView);
             int y = listView.Y + S(4) - ScrollPos;
             foreach (var row in sorted)
             {
@@ -137,7 +136,7 @@ namespace Panoptic
                 }
                 y += rowH;
             }
-            g.Restore(state);
+            UnclipP(g, state);
             if (sorted.Count == 0)
                 DrawText(g, empty, fonts.Body, listView, th.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             DrawScrollbar(g);
@@ -160,12 +159,7 @@ namespace Panoptic
                 if (i == selected) Fill(g, r, IsHover(key) ? th.AccentHover : th.Accent, r.Height / 2f);
                 else
                 {
-                    using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), r.Height / 2f))
-                    {
-                        using (var b = new SolidBrush(th.ControlFill)) g.FillPath(b, p);
-                        if (IsHover(key)) using (var b = new SolidBrush(th.HoverOverlay)) g.FillPath(b, p);
-                        using (var pen = new Pen(ControlStroke)) g.DrawPath(pen, p);
-                    }
+                    { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, r.Height / 2f, th.ControlFill); HoverFill(g, key, Rectangle.Round(rr), r.Height / 2f); StrokeRoundP(g, rr, r.Height / 2f, ControlStroke, 1f); }
                 }
                 DrawText(g, labels[i], fonts.Body, r, i == selected ? th.OnAccent : th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 x += w + S(8);

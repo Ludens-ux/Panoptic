@@ -196,6 +196,43 @@ namespace Panoptic
             return 0;
         }
 
+        /// <summary>Diagnóstico: cada página de la ventana principal con GDI+ y con Direct2D, y cuánto tarda cada una.</summary>
+        public static int MainGpu(string[] args)
+        {
+            string dir = args[1];
+            Theme.ForceDark = args.Length <= 2 || args[2] != "light";
+            Theme.ForceGlass = false;
+            Seed();
+            var host = new DemoHost { Snap = Demo(), Store = new HistoryStore() };
+            var sb = new System.Text.StringBuilder();
+            try
+            {
+                foreach (var page in new[] { "perf", "procs", "hist", "log", "usb", "power", "settings", "settings-end" })
+                    using (var m = new MainWindow(host))
+                    {
+                        m.CreateControl();
+                        var h = m.Handle;
+                        m.Size = new Size(1040, 700);
+                        m.PreviewPage(page.Replace("-end", ""), "cpu", 10420, page.EndsWith("-end") ? 99999 : 0);
+                        if (page.EndsWith("-end")) m.RenderToBitmap().Dispose();
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        Bitmap gdi = null;
+                        for (int i = 0; i < 10; i++) { if (gdi != null) gdi.Dispose(); gdi = m.RenderToBitmap(); }
+                        double gdiMs = sw.Elapsed.TotalMilliseconds / 10;
+                        double gpuMs = 0, one;
+                        Bitmap gpu = null;
+                        for (int i = 0; i < 10; i++) { if (gpu != null) gpu.Dispose(); gpu = m.RenderGpuForTest(out one); gpuMs += one; }
+                        gpuMs /= 10;
+                        using (gdi) gdi.Save(System.IO.Path.Combine(dir, page + "-gdi.png"), ImageFormat.Png);
+                        if (gpu != null) using (gpu) gpu.Save(System.IO.Path.Combine(dir, page + "-d2d.png"), ImageFormat.Png);
+                        sb.AppendLine(page.PadRight(14) + " GDI+ " + gdiMs.ToString("0.00") + " ms · Direct2D " + (gpu == null ? "no disponible" : gpuMs.ToString("0.00") + " ms"));
+                    }
+            }
+            catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "tiempos.txt"), sb.ToString());
+            return 0;
+        }
+
         public static int Render(string[] args)
         {
             string dir = args[1];
