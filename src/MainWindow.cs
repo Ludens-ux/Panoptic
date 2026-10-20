@@ -69,7 +69,12 @@ namespace Panoptic
             RestorePlacement();
         }
 
-        internal void PreviewPage(string p, string res, int pid, int scrollPx = 0) { page = p; if (res != null) resource = res; selectedPid = pid; scroll[p] = scrollPx; }
+        internal void PreviewPage(string p, string res, int pid, int scrollPx = 0)
+        {
+            page = p; if (res != null) resource = res; selectedPid = pid; scroll[p] = scrollPx;
+            if (p == "usb") usbItems = UsbHistory.Scan();
+            if (p == "power") powerItems = PowerHistory.Scan(powerDays);
+        }
 
         /// <summary>Selecciona un proceso en la lista (desde la isla).</summary>
         public void SelectProcess(int pid)
@@ -187,7 +192,7 @@ namespace Panoptic
 
             // El registro de archivos solo corre mientras esta página está a la vista.
             if (host.Helper != null) host.Helper.WantFiles = page == "files";
-            search.Visible = page == "procs" || page == "net" || page == "files" || page == "startup" || page == "services" || page == "log";
+            search.Visible = page == "procs" || page == "net" || page == "files" || page == "usb" || page == "power" || page == "startup" || page == "services" || page == "log";
             var snap = host.Latest;
             if (snap == null)
             {
@@ -199,6 +204,8 @@ namespace Panoptic
             else if (page == "hist") PaintHistory(g, content);
             else if (page == "net") PaintConnections(g, content, snap);
             else if (page == "files") PaintFiles(g, content, snap);
+            else if (page == "usb") PaintUsb(g, content);
+            else if (page == "power") PaintPower(g, content);
             else if (page == "startup") PaintStartup(g, content);
             else if (page == "services") PaintServices(g, content);
             else if (page == "settings") PaintSettings(g, content);
@@ -225,6 +232,8 @@ namespace Panoptic
             NavItem(g, "hist", Glyphs.History, "Historial", navW, ref y);
             NavItem(g, "net", Glyphs.Globe, "Conexiones", navW, ref y);
             NavItem(g, "files", Glyphs.Folder, "Archivos", navW, ref y);
+            NavItem(g, "usb", Glyphs.Usb, "Dispositivos USB", navW, ref y);
+            NavItem(g, "power", Glyphs.Power, "Encendidos", navW, ref y);
             NavItem(g, "startup", Glyphs.Startup, "Inicio", navW, ref y);
             NavItem(g, "services", Glyphs.Services, "Servicios", navW, ref y);
             NavItem(g, "log", Glyphs.Log, "Registro", navW, ref y);

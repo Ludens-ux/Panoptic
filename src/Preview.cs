@@ -220,7 +220,7 @@ namespace Panoptic
                 w.Relayout();
                 Save(w, System.IO.Path.Combine(dir, "widget.png"));
             }
-            foreach (var page in new[] { "perf", "procs", "log", "hist", "net", "net-scroll", "files", "startup", "services", "settings", "settings-end" })
+            foreach (var page in new[] { "perf", "procs", "log", "hist", "net", "net-scroll", "files", "usb", "power", "startup", "services", "settings", "settings-end" })
             {
                 using (var m = new MainWindow(host))
                 {

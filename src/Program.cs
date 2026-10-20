@@ -21,6 +21,26 @@ namespace Panoptic
             if (args.Length >= 1 && args[0] == "--install-helper") return HelperService.Install();
             if (args.Length >= 1 && args[0] == "--uninstall-helper") return HelperService.Uninstall();
             if (args.Length >= 3 && args[0] == "--helper-query") return HelperQuery(args);
+            // Diagnóstico: historial de USB y de encendidos (--history-test archivo).
+            if (args.Length >= 2 && args[0] == "--history-test")
+            {
+                var sb = new System.Text.StringBuilder();
+                try
+                {
+                    foreach (var d in UsbHistory.Scan())
+                        sb.AppendLine("USB | " + d.Kind + " | " + d.Name + " | " + d.Vendor + " " + d.Product + " | " + d.VidPid + " | N/S " + d.Serial + (d.RealSerial ? "" : " (generado)") +
+                            " | 1ª " + d.FirstInstall + " | últ " + d.LastArrival + " | desc " + d.LastRemoval + " | " + (d.Present ? "conectado" : "-"));
+                }
+                catch (Exception ex) { sb.AppendLine("USB ERROR " + ex); }
+                try
+                {
+                    foreach (var e in PowerHistory.Scan(30))
+                        sb.AppendLine("PWR | " + e.Time.ToString("yyyy-MM-dd HH:mm:ss") + " | " + e.KindName + " | " + (e.Duration.HasValue ? Format.Duration(e.Duration.Value) : "") + " | " + e.Detail);
+                }
+                catch (Exception ex) { sb.AppendLine("PWR ERROR " + ex); }
+                System.IO.File.WriteAllText(args[1], sb.ToString());
+                return 0;
+            }
             // Diagnóstico: limpia un archivo de registro dado (--prune-file archivo días).
             if (args.Length >= 3 && args[0] == "--prune-file")
                 return Activity.PruneFile(args[1], DateTime.Now.AddDays(-int.Parse(args[2])).ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
