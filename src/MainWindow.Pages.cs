@@ -580,9 +580,11 @@ namespace Panoptic
 
             if (Settings.IsIsland)
             {
-                segmented("", "Posición", "Arriba al centro o justo encima de la barra de tareas",
-                    new[] { "Arriba", "Sobre la barra de tareas" }, Settings.IslandPosition == "Top" ? 0 : 1,
-                    i => { Settings.IslandPosition = i == 0 ? "Top" : "Taskbar"; host.WidgetChanged(); });
+                segmented("", "Posición", "Abajo es sobre la barra de tareas; en los costados se muestra vertical",
+                    Settings.IslandPositionNames, Math.Max(0, Array.IndexOf(Settings.IslandPositions, Settings.IslandPosition)),
+                    i => { Settings.IslandPosition = Settings.IslandPositions[i]; host.WidgetChanged(); });
+                toggle("", "Ocultar automáticamente", "Se esconde en el borde y aparece al acercar el mouse (también con las alertas)", Settings.IslandAutoHide,
+                    () => { Settings.IslandAutoHide = !Settings.IslandAutoHide; host.WidgetChanged(); });
                 toggle("", "Expandir al pasar el mouse", "Se abre a los 250 ms y se cierra al salir; si no, con un clic", Settings.IslandHoverExpand,
                     () => { Settings.IslandHoverExpand = !Settings.IslandHoverExpand; host.WidgetChanged(); });
                 toggle(Glyphs.Warning, "Mostrar alertas en la isla", "Descargas, temperatura alta, procesos que acaparan la CPU, cargador y USB", Settings.IslandAlerts,

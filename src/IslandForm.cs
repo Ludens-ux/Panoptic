@@ -155,7 +155,52 @@ namespace Panoptic
             try { using (new FontFamily(a)) return a; } catch { return b; }
         }
 
-        bool Top { get { return Settings.IslandPosition != "Taskbar"; } }
+        string Pos { get { return Settings.IslandPosition; } }
+        bool Top { get { return Pos == "Top"; } }
+        /// <summary>A la izquierda o a la derecha de la pantalla: la compacta es vertical.</summary>
+        bool Side { get { return Pos == "Left" || Pos == "Right"; } }
+
+        /// <summary>Hacia dónde sale la isla al ocultarse (el borde de la pantalla donde está).</summary>
+        Point Outward
+        {
+            get
+            {
+                switch (Pos)
+                {
+                    case "Taskbar": return new Point(0, 1);
+                    case "Left": return new Point(-1, 0);
+                    case "Right": return new Point(1, 0);
+                    default: return new Point(0, -1);
+                }
+            }
+        }
+
+        /// <summary>Posición de la forma (w × h píxeles) en pantalla, sin el desplazamiento de ocultarse.</summary>
+        Rectangle HomeShape(int w, int h)
+        {
+            var wa = Screen.PrimaryScreen.WorkingArea;
+            int gap = S(10);
+            switch (Pos)
+            {
+                case "Taskbar": return new Rectangle(wa.X + (wa.Width - w) / 2, wa.Bottom - gap - h, w, h);   // crece hacia arriba
+                case "Left": return new Rectangle(wa.X + gap, wa.Y + (wa.Height - h) / 2, w, h);
+                case "Right": return new Rectangle(wa.Right - gap - w, wa.Y + (wa.Height - h) / 2, w, h);
+                default: return new Rectangle(wa.X + (wa.Width - w) / 2, wa.Y + gap, w, h);
+            }
+        }
+
+        /// <summary>Desplazamiento (en píxeles) de la isla mientras se esconde o aparece.</summary>
+        Point HideOffset
+        {
+            get
+            {
+                if (hideK <= 0) return Point.Empty;
+                var o = Outward;
+                int dist = (o.X != 0 ? Area.Width : Area.Height) + S(10) + (layered ? ShadowMargin : 0) + S(2);
+                int d = (int)Math.Round(dist * hideK);
+                return new Point(o.X * d, o.Y * d);
+            }
+        }
 
         // ================================================================== mostrar / ocultar
 
@@ -165,6 +210,9 @@ namespace Panoptic
             var sc = Screen.PrimaryScreen;
             SetScale(Native.ScaleForPoint(new Point(sc.WorkingArea.X + sc.WorkingArea.Width / 2, sc.WorkingArea.Y + 5)));
             expanded = false;
+            lastPos = Pos;
+            hideK = slideFrom = slideTo = 0;
+            autoHidden = false;
             cur = from = to = TargetSize();
             ApplyBounds();
             islandOn = true;
@@ -182,9 +230,25 @@ namespace Panoptic
             Hide();
         }
 
+        /// <summary>Cambio de borde: se ubica de inmediato en el lugar nuevo (sin animar desde el anterior).</summary>
+        string lastPos;
+
+        void ChangePosition()
+        {
+            lastPos = Pos;
+            expanded = false;
+            cur = from = to = TargetSize();
+            canvas = Rectangle.Empty;
+            lastFrameKey = null;
+            ApplyBounds();
+            Invalidate();
+            UpdatePolling();
+        }
+
         /// <summary>Recalcula el tamaño y la posición después de un cambio en Configuración.</summary>
         public void Relayout()
         {
+            if (Pos != lastPos) { lastPos = Pos; ReloadTheme(); ChangePosition(); return; }
             ReloadTheme();
             StartResize();
             UpdatePolling();
@@ -219,10 +283,53 @@ namespace Panoptic
         // está expandida o el cursor está encima.
         DateTime revealUntil = DateTime.MinValue;
 
+        // ---- Ocultar automáticamente: la isla se desliza fuera del borde y vuelve al acercar el mouse.
+        float hideK;                         // 0 visible … 1 escondida
+        float slideFrom, slideTo;
+        double slideStart = -1e9;
+        const int SlideMs = 220;
+        bool autoHidden;
+        DateTime nearUntil = DateTime.MinValue;
+
+        void SetAutoHidden(bool hide)
+        {
+            if (hide == autoHidden) return;
+            autoHidden = hide;
+            slideFrom = hideK;
+            slideTo = hide ? 1 : 0;
+            if (!hide && !Visible && islandOn && !previewMode) { Show(); }
+            if (!Native.AnimationsEnabled() || previewMode) { hideK = slideTo; AfterSlide(); return; }
+            slideStart = Clock.Ms;
+            StartAnim();
+        }
+
+        void AfterSlide()
+        {
+            ApplyBounds();
+            if (hideK >= 1 && autoHidden && Visible) Hide();
+            else if (layered) RenderLayered();
+        }
+
+        /// <summary>El cursor está contra el borde de la pantalla donde vive la isla, a la altura de la isla.</summary>
+        bool NearEdge(Point p)
+        {
+            var sb = Screen.PrimaryScreen.Bounds;
+            var home = HomeShape(S(cur.Width), S(cur.Height));
+            int t = S(4), spanX = home.Width / 2 + S(120), spanY = home.Height / 2 + S(120);
+            int cx = home.X + home.Width / 2, cy = home.Y + home.Height / 2;
+            switch (Pos)
+            {
+                case "Taskbar": return p.Y >= sb.Bottom - t && Math.Abs(p.X - cx) <= spanX;
+                case "Left": return p.X <= sb.Left + t && Math.Abs(p.Y - cy) <= spanY;
+                case "Right": return p.X >= sb.Right - 1 - t && Math.Abs(p.Y - cy) <= spanY;
+                default: return p.Y <= sb.Top + t && Math.Abs(p.X - cx) <= spanX;
+            }
+        }
+
         void UpdateVisibility()
         {
             if (!islandOn || previewMode) return;
-            bool show = !fullScreen || expanded || active != null || DateTime.Now < revealUntil;
+            bool show = (!fullScreen || expanded || active != null || DateTime.Now < revealUntil) && !(autoHidden && hideK >= 1);
             if (show && !Visible) { ApplyBounds(); Show(); if (layered) RenderLayered(); }
             else if (!show && Visible) Hide();
         }
@@ -240,7 +347,17 @@ namespace Panoptic
             }
             if (active != null) return new SizeF(ContextWidth(active), active.Height);
             if (download != null) return new SizeF(ContextWidth(download), download.Height);
+            if (Side) return SideCompactSize();
             return Top ? new SizeF(CompactWidth(), 38) : new SizeF(260, 36);
+        }
+
+        /// <summary>Compacta vertical (costados): ícono, un anillo por métrica y la red.</summary>
+        SizeF SideCompactSize()
+        {
+            if (Settings.IslandCompactSet == 2) return new SizeF(68, 12 + 22 + 12 + 18 + 8 + 4 * 16 + 12);
+            var snap = host.Latest;
+            int groups = snap == null ? 3 : Math.Max(1, CompactMetrics(snap).Count);
+            return new SizeF(68, 12 + 22 + 12 + groups * (24 + 4 + 16 + 10) + 2 * 16 + 12);
         }
 
         /// <summary>
@@ -280,7 +397,7 @@ namespace Panoptic
             get
             {
                 double now = Clock.Ms;
-                return now - resizeStart < ResizeMs || now - fadeStart < 400 || ValuesMoving();
+                return now - resizeStart < ResizeMs || now - fadeStart < 400 || hideK != slideTo || ValuesMoving();
             }
         }
 
@@ -307,8 +424,14 @@ namespace Panoptic
             {
                 if (!layered) return ClientRectangle;
                 var a = Area;
-                int x = (canvas.Width - a.Width) / 2;
-                int y = Top ? ShadowMargin : canvas.Height - ShadowMargin - a.Height;
+                int x = (canvas.Width - a.Width) / 2, y = (canvas.Height - a.Height) / 2;
+                switch (Pos)
+                {
+                    case "Top": y = ShadowMargin; break;
+                    case "Taskbar": y = canvas.Height - ShadowMargin - a.Height; break;
+                    case "Left": x = ShadowMargin; break;
+                    case "Right": x = canvas.Width - ShadowMargin - a.Width; break;
+                }
                 return new Rectangle(x, y, a.Width, a.Height);
             }
         }
@@ -328,15 +451,16 @@ namespace Panoptic
         void ApplyBounds()
         {
             if (!IsHandleCreated) return;
-            var wa = Screen.PrimaryScreen.WorkingArea;
+            var off = HideOffset;
             if (layered)
             {
                 // El lienzo cubre el tamaño máximo, con margen para el rebote (la curva supera el 100 %).
                 var big = TargetSizeExpanded();
                 float bw = Math.Max(big.Width, Math.Max(cur.Width, to.Width)) * 1.12f, bh = Math.Max(big.Height, Math.Max(cur.Height, to.Height)) * 1.12f;
                 int w = S(bw) + 2 * ShadowMargin, h = S(bh) + 2 * ShadowMargin;
-                int x = wa.X + (wa.Width - w) / 2;
-                int y = Top ? wa.Y + S(10) - ShadowMargin : wa.Bottom - S(10) + ShadowMargin - h;
+                // El lienzo se ubica como si fuera la forma (sin los márgenes de la sombra) y después se corre.
+                var home = HomeShape(w - 2 * ShadowMargin, h - 2 * ShadowMargin);
+                int x = home.X - ShadowMargin + off.X, y = home.Y - ShadowMargin + off.Y;
                 var r = new Rectangle(x, y, w, h);
                 if (r != canvas)
                 {
@@ -348,9 +472,8 @@ namespace Panoptic
             }
             {
                 int w = Math.Max(S(40), S(cur.Width)), h = Math.Max(S(24), S(cur.Height));
-                int x = wa.X + (wa.Width - w) / 2;
-                int y = Top ? wa.Y + S(10) : wa.Bottom - h - S(10);   // sobre la barra de tareas crece hacia arriba
-                Native.SetWindowPos(Handle, IntPtr.Zero, x, y, w, h, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
+                var home = HomeShape(w, h);
+                Native.SetWindowPos(Handle, IntPtr.Zero, home.X + off.X, home.Y + off.Y, w, h, Native.SWP_NOZORDER | Native.SWP_NOACTIVATE);
             }
         }
 
@@ -476,6 +599,16 @@ namespace Panoptic
                 resized = true;
             }
             else if (cur != to) { cur = to; resized = true; }
+            // Deslizamiento al ocultarse o aparecer (sale rápido y frena al final).
+            double se = Clock.Ms - slideStart;
+            if (hideK != slideTo)
+            {
+                double k = Math.Min(1, Math.Max(0, se / SlideMs));
+                k = 1 - Math.Pow(1 - k, 3);
+                hideK = (float)(slideFrom + (slideTo - slideFrom) * k);
+                if (se >= SlideMs) { hideK = slideTo; AfterSlide(); }
+                else ApplyBounds();
+            }
             StepValues();
             if (layered)
             {
@@ -716,7 +849,8 @@ namespace Panoptic
 
         void UpdatePolling()
         {
-            if (expanded || Settings.IslandHoverExpand || fullScreen) poll.Start(); else poll.Stop();
+            if (!Settings.IslandAutoHide) SetAutoHidden(false);
+            if (expanded || Settings.IslandHoverExpand || Settings.IslandAutoHide || fullScreen) poll.Start(); else poll.Stop();
         }
 
         /// <summary>Expandir al pasar el mouse y colapsar al hacer clic afuera (la isla nunca toma el foco).</summary>
@@ -725,14 +859,19 @@ namespace Panoptic
             var p = Cursor.Position;
             if (fullScreen)
             {
-                // Borde de la pantalla donde está la isla (arriba o abajo), cerca de su centro horizontal.
-                var sb = Screen.PrimaryScreen.Bounds;
-                var wa = Screen.PrimaryScreen.WorkingArea;
-                int cx = wa.X + wa.Width / 2, span = S(cur.Width) / 2 + S(120);
-                bool nearEdge = Math.Abs(p.X - cx) <= span && (Top ? p.Y <= sb.Top + S(3) : p.Y >= sb.Bottom - S(4));
+                // Borde de la pantalla donde está la isla, a su altura.
+                bool nearEdge = NearEdge(p);
                 bool overIsland = Visible && Rectangle.Inflate(ShapeScreen, S(24), S(24)).Contains(p);
                 if (nearEdge || overIsland || openMenu != null) revealUntil = DateTime.Now.AddMilliseconds(700);
                 UpdateVisibility();
+            }
+            else if (Settings.IslandAutoHide && islandOn)
+            {
+                // Cerca de su lugar o contra el borde: aparece. Expandida, con un aviso o con el menú abierto: se queda.
+                var home = HomeShape(S(cur.Width), S(cur.Height));
+                bool near = Rectangle.Inflate(home, S(40), S(40)).Contains(p) || NearEdge(p);
+                if (near || expanded || active != null || openMenu != null) nearUntil = DateTime.Now.AddMilliseconds(near ? 900 : 300);
+                SetAutoHidden(DateTime.Now >= nearUntil);
             }
             if (!Visible) return;
             bool inside = ShapeScreen.Contains(p);
@@ -785,10 +924,15 @@ namespace Panoptic
         void ShowOptions(Point at)
         {
             var m = FluentMenu.Create(th, s);
-            var a = FluentMenu.Add(m, "Posición: arriba al centro", null, true, () => { Settings.IslandPosition = "Top"; Relayout(); });
-            a.Checked = Top;
-            var b = FluentMenu.Add(m, "Posición: sobre la barra de tareas", null, true, () => { Settings.IslandPosition = "Taskbar"; Relayout(); });
-            b.Checked = !Top;
+            string[] posText = { "Posición: arriba al centro", "Posición: sobre la barra de tareas", "Posición: a la izquierda", "Posición: a la derecha" };
+            for (int i = 0; i < Settings.IslandPositions.Length; i++)
+            {
+                string p = Settings.IslandPositions[i];
+                var it = FluentMenu.Add(m, posText[i], null, true, () => { Settings.IslandPosition = p; ChangePosition(); });
+                it.Checked = Pos == p;
+            }
+            var ah = FluentMenu.Add(m, "Ocultar automáticamente", null, true, () => { Settings.IslandAutoHide = !Settings.IslandAutoHide; UpdatePolling(); });
+            ah.Checked = Settings.IslandAutoHide;
             FluentMenu.Separator(m);
             var hv = FluentMenu.Add(m, "Expandir al pasar el mouse", null, true, () => { Settings.IslandHoverExpand = !Settings.IslandHoverExpand; UpdatePolling(); });
             hv.Checked = Settings.IslandHoverExpand;
@@ -861,7 +1005,58 @@ namespace Panoptic
             if (expanded) { if (Top) PaintExpandedTop(g, snap); else PaintExpandedTaskbar(g, snap); return; }
             var ctx = active ?? download;
             if (ctx != null) { PaintContext(g, ctx); return; }
-            if (Top) PaintCompactTop(g, snap, AreaRect); else PaintCompactTaskbar(g, snap, AreaRect);
+            if (Top) PaintCompactTop(g, snap, AreaRect);
+            else if (Side) PaintCompactSide(g, snap, AreaRect);
+            else PaintCompactTaskbar(g, snap, AreaRect);
+        }
+
+        // ---- Compacta (costados): vertical
+
+        void PaintCompactSide(Graphics g, Snapshot snap, Rectangle r)
+        {
+            int cx = r.X + r.Width / 2, y = r.Y + S(12);
+            var center = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
+            AppIcon(g, new Rectangle(cx - S(11), y, S(22), S(22)));
+            y += S(22) + S(12);
+            var net = snap.Nets.OrderByDescending(n => n.RecvBps + n.SendBps).FirstOrDefault();
+
+            if (Settings.IslandCompactSet == 2)
+            {
+                // Vista de red: tipo de conexión y velocidades, una debajo de la otra.
+                Color nc = MetricColor(ResColors.Net(th));
+                string name = net == null ? "Sin red" : net.Kind;
+                DrawText(g, name, fCaption12, new Rectangle(r.X, y, r.Width, S(18)), nc, center);
+                y += S(18) + S(8);
+                if (net != null)
+                    foreach (var line in new[] { "↓", Format.Bits(net.RecvBps), "↑", Format.Bits(net.SendBps) })
+                    {
+                        DrawText(g, line, fCaption12, new Rectangle(r.X, y, r.Width, S(16)), line.Length == 1 ? Secondary : th.Text, center);
+                        y += S(16);
+                    }
+                AddHit("compact", r, null, "Isla: " + name + (net != null ? ", bajada " + Format.Bits(net.RecvBps) : "")).Focusable = false;
+                return;
+            }
+
+            var ms = CompactMetrics(snap);
+            foreach (var m in ms)
+            {
+                float v = Value("c-" + m.Id, m.Value);
+                Ring(g, new RectangleF(cx - S(12), y, S(24), S(24)), 3f * s, v, MetricColor(m.Color));
+                y += S(24) + S(4);
+                DrawText(g, m.Short, fValue13, new Rectangle(r.X, y, r.Width, S(16)), th.Text, center);
+                y += S(16) + S(10);
+            }
+            using (var b = new SolidBrush(th.Dark ? Color.FromArgb(31, 255, 255, 255) : Color.FromArgb(31, 0, 0, 0)))
+                g.FillRectangle(b, cx - S(10), y - S(5), S(20), Math.Max(1, S(1)));
+            if (net != null)
+            {
+                // "↓ 11,2" y la unidad abajo: no entra en una sola línea.
+                string bits = Format.Bits(net.RecvBps);
+                int sp = bits.LastIndexOf(' ');
+                DrawText(g, "↓ " + (sp > 0 ? bits.Substring(0, sp) : bits), fCaption12, new Rectangle(r.X, y, r.Width, S(16)), Secondary, center);
+                if (sp > 0) DrawText(g, bits.Substring(sp + 1), fSmall11, new Rectangle(r.X, y + S(16), r.Width, S(16)), Secondary, center);
+            }
+            AddHit("compact", r, null, "Isla: " + string.Join(", ", ms.Select(m => m.Label + " " + m.Short))).Focusable = false;
         }
 
         /// <summary>Anillo de progreso: pista al 22 %, trazo con extremos redondeados, empieza a las 12 y gira en sentido horario.</summary>

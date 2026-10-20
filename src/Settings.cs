@@ -76,7 +76,20 @@ namespace Panoptic
         public static string WidgetStyle { get { return GetString("WidgetStyle", "Isla") == "Widget" ? "Widget" : "Isla"; } set { SetString("WidgetStyle", value); } }
         public static bool IsIsland { get { return WidgetStyle == "Isla"; } }
         /// <summary>"Top" (arriba al centro) o "Taskbar" (sobre la barra de tareas).</summary>
-        public static string IslandPosition { get { return GetString("IslandPosition", "Top") == "Taskbar" ? "Taskbar" : "Top"; } set { SetString("IslandPosition", value); } }
+        /// <summary>"Top", "Taskbar" (abajo, sobre la barra de tareas), "Left" o "Right".</summary>
+        public static string IslandPosition
+        {
+            get
+            {
+                string v = GetString("IslandPosition", "Top");
+                return v == "Taskbar" || v == "Left" || v == "Right" ? v : "Top";
+            }
+            set { SetString("IslandPosition", value); }
+        }
+        public static readonly string[] IslandPositions = { "Top", "Taskbar", "Left", "Right" };
+        public static readonly string[] IslandPositionNames = { "Arriba", "Abajo", "Izquierda", "Derecha" };
+        /// <summary>La isla se esconde en el borde y aparece al acercar el mouse.</summary>
+        public static bool IslandAutoHide { get { return Flag("IslandAutoHide", false); } set { SetFlag("IslandAutoHide", value); } }
         public static bool IslandHoverExpand { get { return Flag("IslandHoverExpand", false); } set { SetFlag("IslandHoverExpand", value); } }
         public static bool IslandAlerts { get { return Flag("IslandAlerts", true); } set { SetFlag("IslandAlerts", value); } }
         /// <summary>"PerMetric" (un color por métrica) o "Accent" (todos con el color de acento).</summary>

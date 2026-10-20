@@ -197,6 +197,8 @@ namespace Panoptic
                 Tuple.Create("isla-proceso", false, "Top", "hog"),
                 Tuple.Create("isla-cargador", false, "Top", "charger"),
                 Tuple.Create("isla-usb", false, "Top", "usb"),
+                Tuple.Create("isla-izquierda", false, "Left", (string)null),
+                Tuple.Create("isla-derecha-expandida", true, "Right", (string)null),
             };
             try
             {
