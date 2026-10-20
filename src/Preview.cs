@@ -229,8 +229,37 @@ namespace Panoptic
                     }
             }
             catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
+            try
+            {
+                using (var f = new TrayFlyout(host))
+                {
+                    f.CreateControl(); var h = f.Handle; f.PrepareRender();
+                    SaveBoth(f, dir, "bandeja", sb);
+                }
+                using (var w = new WidgetForm(host))
+                {
+                    w.CreateControl(); var h = w.Handle; w.Relayout();
+                    SaveBoth(w, dir, "widget", sb);
+                }
+            }
+            catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
             System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "tiempos.txt"), sb.ToString());
             return 0;
+        }
+
+        static void SaveBoth(Surface f, string dir, string name, System.Text.StringBuilder sb)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            using (var a = f.RenderToBitmap())
+            {
+                double gdiMs = sw.Elapsed.TotalMilliseconds, gpuMs;
+                a.Save(System.IO.Path.Combine(dir, name + "-gdi.png"), ImageFormat.Png);
+                using (var b = f.RenderGpuForTest(out gpuMs))
+                {
+                    if (b != null) b.Save(System.IO.Path.Combine(dir, name + "-d2d.png"), ImageFormat.Png);
+                    sb.AppendLine(name.PadRight(14) + " GDI+ " + gdiMs.ToString("0.00") + " ms · Direct2D " + (b == null ? "no disponible" : gpuMs.ToString("0.00") + " ms"));
+                }
+            }
         }
 
         public static int Render(string[] args)

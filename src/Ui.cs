@@ -489,6 +489,42 @@ namespace Panoptic
             using (var b = new SolidBrush(c)) g.FillEllipse(b, r);
         }
 
+        /// <summary>Llena toda la ventana con un color, reemplazando lo que había (también con transparencia).</summary>
+        protected void ClearP(Graphics g, Color c)
+        {
+            if (d2d != null) { d2d.FillCopy(new RectangleF(-1e6f, -1e6f, 2e6f, 2e6f), c); return; }
+            g.Clear(c);
+        }
+
+        protected void StrokeEllipseP(Graphics g, RectangleF r, Color c, float width)
+        {
+            if (d2d != null) { d2d.StrokeEllipse(r, c, width); return; }
+            using (var pen = new Pen(c, width)) g.DrawEllipse(pen, r);
+        }
+
+        /// <summary>Arco con extremos redondeados (grados, 0 = a la derecha, sentido horario).</summary>
+        protected void StrokeArcP(Graphics g, RectangleF r, float startDeg, float sweepDeg, Color c, float width)
+        {
+            if (d2d != null) { d2d.StrokeArc(r, startDeg, sweepDeg, c, width); return; }
+            using (var pen = new Pen(c, width))
+            {
+                pen.StartCap = pen.EndCap = LineCap.Round;
+                g.DrawArc(pen, r, startDeg, sweepDeg);
+            }
+        }
+
+        Bitmap lastVibrancyImage;
+
+        /// <summary>Fondo con vibrancia (fondo de pantalla desenfocado) detrás de <paramref name="screen"/>.</summary>
+        protected void VibrancyP(Graphics g, Vibrancy v, Rectangle screen, Rectangle dest)
+        {
+            if (d2d == null) { v.Draw(g, screen, dest); return; }
+            var img = v.Region(screen, dest.Size);
+            if (img != lastVibrancyImage) { if (lastVibrancyImage != null) d2d.Forget(lastVibrancyImage); lastVibrancyImage = img; }
+            if (img != null) d2d.FillCopy(dest, Color.Transparent);
+            if (img != null) d2d.Image(img, dest, 1f);
+        }
+
         sealed class GpuClip { public int Transforms; }
 
         /// <summary>Recorta lo que se dibuje hasta UnclipP (se combina con el recorte actual).</summary>

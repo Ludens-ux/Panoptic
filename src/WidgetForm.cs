@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -249,6 +249,9 @@ namespace Panoptic
             if (!moving) anim.Stop();
         }
 
+        /// <summary>El widget se dibuja con la placa de video (Direct2D); si no se puede, con GDI+.</summary>
+        protected override bool UseGpu { get { return true; } }
+
         protected override void PaintSurface(Graphics g)
         {
             secondary = th.TextSecondary;
@@ -256,12 +259,12 @@ namespace Panoptic
             if (VibrancyOn && vibrancy.Ensure(Bounds, th.Dark))
             {
                 // Vibrancia: fondo de pantalla desenfocado y saturado, y colores tomados de ese fondo.
-                vibrancy.Draw(g, Bounds, ClientRectangle);
+                VibrancyP(g, vibrancy, Bounds, ClientRectangle);
                 var avg = vibrancy.Average(Bounds);
                 secondary = Vibrancy.Vibrant(avg, th.Dark, 0.82f, 255);
                 track = Vibrancy.Vibrant(avg, th.Dark, 0.62f, 110);
             }
-            else g.Clear(th.Glass ? GlassTint : th.Layer);
+            else ClearP(g, th.Glass ? GlassTint : th.Layer);
             int W = ClientSize.Width;
             Glyph(g, Glyphs.Performance, fonts.Glyph16, new Rectangle(S(14), S(12), S(20), S(24)), th.Accent);
             DrawText(g, AppInfo.Name, fonts.BodyStrong, new Rectangle(S(42), S(12), S(140), S(24)), th.Text);
@@ -382,14 +385,8 @@ namespace Panoptic
             float d = 76 * s, stroke = 7 * s;
             var rr = new RectangleF(col.X + (col.Width - d) / 2f, col.Y + S(8), d, d);
             var inner = RectangleF.Inflate(rr, -stroke / 2f, -stroke / 2f);
-            using (var trackPen = new Pen(track, stroke))
-                g.DrawEllipse(trackPen, inner);
-            if (v > 0.2f)
-                using (var pen = new Pen(c, stroke))
-                {
-                    pen.StartCap = pen.EndCap = System.Drawing.Drawing2D.LineCap.Round;
-                    g.DrawArc(pen, inner, -90f, Math.Max(1f, 360f * Math.Min(100f, v) / 100f));
-                }
+            StrokeEllipseP(g, inner, track, stroke);
+            if (v > 0.2f) StrokeArcP(g, inner, -90f, Math.Max(1f, 360f * Math.Min(100f, v) / 100f), c, stroke);
             var center = new Rectangle((int)rr.X, (int)rr.Y, (int)rr.Width, (int)rr.Height);
             DrawText(g, centerText ?? v.ToString("0") + "%", fonts.Subtitle, center, th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             DrawText(g, label, fonts.Caption, new Rectangle(col.X, (int)rr.Bottom + S(8), col.Width, S(18)), th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);

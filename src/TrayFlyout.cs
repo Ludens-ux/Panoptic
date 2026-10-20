@@ -159,9 +159,12 @@ namespace Panoptic
 
         // ------------------------------------------------------------------ pintado
 
+        /// <summary>El panel se dibuja con la placa de video (Direct2D); si no se puede, con GDI+.</summary>
+        protected override bool UseGpu { get { return true; } }
+
         protected override void PaintSurface(Graphics g)
         {
-            g.Clear(th.Clear);
+            ClearP(g, th.Clear);
             var snap = host.Latest;
             int W = ClientSize.Width, pad = S(12);
             int y = 0;
@@ -264,8 +267,8 @@ namespace Panoptic
 
             // ---- Pie
             int fh = S(48), fy = ClientSize.Height - fh;
-            using (var b = new SolidBrush(th.Footer)) g.FillRectangle(b, 0, fy, W, fh);
-            using (var pen = new Pen(th.FooterStroke)) g.DrawLine(pen, 0, fy, W, fy);
+            FillRoundP(g, new RectangleF(0, fy, W, fh), 0, th.Footer);
+            LineP(g, th.FooterStroke, 1, 0, fy, W, fy);
             string wtext = host.WidgetVisible ? "Ocultar widget" : "Mostrar widget";
             SubtleButton(g, "widget", new Rectangle(S(8), fy + S(8), MeasureText(wtext, fonts.Body) + S(48), S(32)),
                 host.WidgetVisible ? Glyphs.Unpin : Glyphs.Pin, wtext, null, () => { host.ToggleWidget(); Invalidate(); });
