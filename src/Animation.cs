@@ -62,6 +62,17 @@ namespace Panoptic
             Graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
         }
 
+        /// <summary>DC del lienzo (para dibujar con Direct2D sobre la misma memoria).</summary>
+        public IntPtr Hdc { get { return dc; } }
+
+        /// <summary>Copia del lienzo (diagnóstico).</summary>
+        public Bitmap Snapshot()
+        {
+            Graphics.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);
+            GdiFlush();
+            return bitmap.Clone(new Rectangle(0, 0, Width, Height), System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+        }
+
         public void Present(IntPtr hwnd, System.Drawing.Point screen)
         {
             Graphics.Flush(System.Drawing.Drawing2D.FlushIntention.Sync);

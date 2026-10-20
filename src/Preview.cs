@@ -157,6 +157,45 @@ namespace Panoptic
             return bmp;
         }
 
+        /// <summary>Diagnóstico: la isla dibujada con GDI+ y con Direct2D, lado a lado, y cuánto tarda cada una.</summary>
+        public static int IslandGpu(string[] args)
+        {
+            string dir = args[1];
+            Theme.ForceDark = args.Length <= 2 || args[2] != "light";
+            Theme.ForceGlass = false;   // modo lienzo (el que usa Direct2D)
+            Seed();
+            var host = new DemoHost { Snap = Demo(), Store = new HistoryStore() };
+            string saved = Settings.IslandPosition;
+            var sb = new System.Text.StringBuilder();
+            var shots = new[]
+            {
+                Tuple.Create("compacta", false, "Top", (string)null),
+                Tuple.Create("expandida", true, "Top", (string)null),
+                Tuple.Create("barra-expandida", true, "Taskbar", (string)null),
+                Tuple.Create("izquierda", false, "Left", (string)null),
+                Tuple.Create("temperatura", false, "Top", "temp"),
+                Tuple.Create("cargador", false, "Top", "charger"),
+            };
+            try
+            {
+                foreach (var shot in shots)
+                    using (var isl = new IslandForm(host))
+                    {
+                        isl.CreateControl();
+                        var h = isl.Handle;
+                        isl.PreviewState(shot.Item2, shot.Item3, shot.Item4);
+                        double gdiMs, gpuMs;
+                        using (var a = isl.RenderCanvasForTest(false, out gdiMs)) if (a != null) a.Save(System.IO.Path.Combine(dir, shot.Item1 + "-gdi.png"), ImageFormat.Png);
+                        using (var b = isl.RenderCanvasForTest(true, out gpuMs)) if (b != null) b.Save(System.IO.Path.Combine(dir, shot.Item1 + "-d2d.png"), ImageFormat.Png);
+                        sb.AppendLine(shot.Item1.PadRight(16) + " GDI+ " + gdiMs.ToString("0.00") + " ms · Direct2D " + gpuMs.ToString("0.00") + " ms" + (isl.UsingGpu ? "" : " (Direct2D NO disponible: usó GDI+)"));
+                    }
+            }
+            catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
+            finally { Settings.IslandPosition = saved; }
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "tiempos.txt"), sb.ToString());
+            return 0;
+        }
+
         public static int Render(string[] args)
         {
             string dir = args[1];

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -102,7 +102,22 @@ namespace Panoptic
         /// <summary>Recorte del fondo detrás de <paramref name="screenRect"/>, ampliado (el aumento produce el desenfoque).</summary>
         public void Draw(Graphics g, Rectangle screenRect, Rectangle dest)
         {
-            if (small == null) return;
+            var img = Region(screenRect, dest.Size);
+            if (img == null) return;
+            var state = g.Save();
+            g.CompositingMode = CompositingMode.SourceCopy;
+            g.DrawImageUnscaled(img, dest.X, dest.Y);
+            g.Restore(state);
+        }
+
+        /// <summary>
+        /// La imagen del fondo detrás de <paramref name="screenRect"/> ya ampliada al tamaño pedido. Es la misma
+        /// instancia mientras no cambie (sirve para guardarla en la placa de video).
+        /// </summary>
+        public Bitmap Region(Rectangle screenRect, Size size)
+        {
+            if (small == null) return null;
+            var dest = new Rectangle(Point.Empty, size);
             if (drawn == null || drawn.Width != dest.Width || drawn.Height != dest.Height || drawnScreen != screenRect || drawnKey != key)
             {
                 if (drawn != null) drawn.Dispose();
@@ -120,10 +135,7 @@ namespace Panoptic
                     dg.DrawImage(small, new Rectangle(0, 0, drawn.Width, drawn.Height), src.X, src.Y, src.Width, src.Height, GraphicsUnit.Pixel, ia);
                 }
             }
-            var state = g.Save();
-            g.CompositingMode = CompositingMode.SourceCopy;
-            g.DrawImageUnscaled(drawn, dest.X, dest.Y);
-            g.Restore(state);
+            return drawn;
         }
 
         /// <summary>Color promedio del fondo detrás de una zona de la pantalla.</summary>

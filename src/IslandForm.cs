@@ -536,6 +536,7 @@ namespace Panoptic
                 surface = new LayeredCanvas(canvas.Width, canvas.Height);
                 lastFrameKey = null;
             }
+            if (RenderLayeredGpu()) return;
             var shape = ShapeClient;
             contentOffset = shape.Location;
             if (content == null || content.Width != shape.Width || content.Height != shape.Height)
@@ -594,6 +595,77 @@ namespace Panoptic
             using (var pen = new Pen(border))
                 g.DrawPath(pen, p);
             surface.Present(Handle, canvas.Location);
+        }
+
+        // ---- Direct2D: la isla se dibuja con la placa de video (texto con DirectWrite). Si no está disponible o
+        // falla, se vuelve al dibujado con GDI+ de abajo.
+        D2DPainter gpu;
+        bool gpuTried;
+        Bitmap lastVibrancy;
+        Rectangle gpuZone;
+        static readonly Bitmap noTarget = new Bitmap(1, 1);   // los ayudantes reciben un Graphics que no se usa
+        public static bool DisableGpu;                          // vista previa y diagnóstico
+
+        bool RenderLayeredGpu()
+        {
+            if (!gpuTried)
+            {
+                gpuTried = true;
+                gpu = DisableGpu ? null : D2DPainter.TryCreate();
+                useDirectWriteMetrics = gpu != null;
+            }
+            if (gpu == null) return false;
+            var shape = ShapeClient;
+            contentOffset = shape.Location;
+            float rad = S(8);
+            Color border = active != null && active.Critical && !expanded ? th.Critical
+                : th.Dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
+            // Solo la forma y su sombra: el resto del lienzo queda transparente (se limpia si la zona cambió).
+            var zone = Rectangle.Intersect(Rectangle.Inflate(shape, ShadowMargin, ShadowMargin), new Rectangle(0, 0, surface.Width, surface.Height));
+            if (zone != gpuZone)
+            {
+                var cg = surface.Graphics;
+                cg.CompositingMode = CompositingMode.SourceCopy;
+                cg.Clear(Color.Transparent);
+                cg.CompositingMode = CompositingMode.SourceOver;
+                cg.Flush(FlushIntention.Sync);
+                gpuZone = zone;
+            }
+            bool ok;
+            try
+            {
+                gpu.Begin(surface.Hdc, zone);
+                gpu.Clear(Color.Transparent);
+                // Sombra suave en capas.
+                for (int i = 4; i >= 1; i--)
+                {
+                    var sr = new RectangleF(shape.X - i * s * 2.5f, shape.Y - i * s * 2.5f + 2 * s, shape.Width + i * s * 5f, shape.Height + i * s * 5f);
+                    gpu.FillRound(sr, rad + i * 2.5f * s, Color.FromArgb(th.Dark ? 14 : 9, 0, 0, 0));
+                }
+                // Contenido recortado por la forma (bordes suavizados por la placa de video).
+                var sf = new RectangleF(shape.X, shape.Y, shape.Width, shape.Height);
+                gpu.PushRoundMask(sf, rad);
+                gpu.PushTranslate(shape.X, shape.Y);
+                d2d = gpu;
+                try { using (var g = Graphics.FromImage(noTarget)) PaintAll(g); }
+                finally { d2d = null; }
+                gpu.PopTransform();
+                gpu.PopLayer();
+                gpu.StrokeRound(new RectangleF(shape.X + .5f, shape.Y + .5f, shape.Width - 1, shape.Height - 1), rad, border, 1f);
+                ok = gpu.End();
+            }
+            catch
+            {
+                // Algo no funcionó con Direct2D en este equipo: se usa GDI+ de acá en adelante.
+                try { gpu.Dispose(); } catch { }
+                gpu = null;
+                useDirectWriteMetrics = false;
+                lastFrameKey = null;
+                return false;
+            }
+            if (!ok) { lastVibrancy = null; lastFrameKey = null; return false; }   // la placa de video se reinició: este cuadro con GDI+
+            surface.Present(Handle, canvas.Location);
+            return true;
         }
 
         static double CubicBezier(double t, double x1, double y1, double x2, double y2)
@@ -972,6 +1044,14 @@ namespace Panoptic
 
         // ================================================================== pintado
 
+        void FillRectI(Graphics g, Color c, Rectangle r) { FillRectI(g, c, r.X, r.Y, r.Width, r.Height); }
+
+        void FillRectI(Graphics g, Color c, float x, float y, float w, float h)
+        {
+            if (d2d != null) d2d.FillRect(new RectangleF(x, y, w, h), c);
+            else using (var b = new SolidBrush(c)) g.FillRectangle(b, x, y, w, h);
+        }
+
         Color MetricColor(Color c) { return Settings.IslandColorMode == "Accent" ? th.Accent : c; }
         Color Track(Color c) { return Color.FromArgb((int)(255 * 0.22), c); }
         Color Secondary { get { return th.Dark ? Color.FromArgb(158, 255, 255, 255) : Color.FromArgb(153, 0, 0, 0); } }
@@ -979,11 +1059,19 @@ namespace Panoptic
         protected override void PaintSurface(Graphics g)
         {
             // Fondo: acrílico de Windows (no se pinta nada), vibrancia si Windows apagó el desenfoque, o sólido.
-            if (th.Glass) g.Clear(Color.Transparent);
+            if (d2d != null)
+            {
+                // Con Direct2D: la vibrancia se sube a la placa de video una vez por cambio de fondo.
+                Bitmap vib = th.TransparencyEnabled && vibrancy.Ensure(ShapeScreen, th.Dark) ? vibrancy.Region(ShapeScreen, AreaRect.Size) : null;
+                if (vib != lastVibrancy) { if (lastVibrancy != null) d2d.Forget(lastVibrancy); lastVibrancy = vib; }
+                if (vib != null) d2d.Image(vib, AreaRect, 1f);
+                else d2d.FillRect(AreaRect, th.Dark ? Theme.Hex(0x202020) : Theme.Hex(0xF3F3F3));
+            }
+            else if (th.Glass) g.Clear(Color.Transparent);
             else if (th.TransparencyEnabled && vibrancy.Ensure(ShapeScreen, th.Dark)) vibrancy.Draw(g, ShapeScreen, AreaRect);
             else g.Clear(th.Dark ? Theme.Hex(0x202020) : Theme.Hex(0xF3F3F3));
             if (active != null && active.Critical && !expanded)
-                using (var b = new SolidBrush(Color.FromArgb((int)(255 * 0.14), th.Critical))) g.FillRectangle(b, AreaRect);
+                FillRectI(g, Color.FromArgb((int)(255 * 0.14), th.Critical), AreaRect);
 
             var snap = host.Latest;
             if (snap == null)
@@ -996,6 +1084,13 @@ namespace Panoptic
 
             float alpha = ContentAlpha();
             if (alpha >= 0.999f) PaintContent(g, snap);
+            else if (alpha > 0.01f && d2d != null)
+            {
+                // Fundido con una capa de opacidad de la placa de video (sin copiar a un bitmap).
+                d2d.PushOpacity(alpha);
+                PaintContent(g, snap);
+                d2d.PopLayer();
+            }
             else if (alpha > 0.01f)
             {
                 // Fundido: el contenido se pinta en una capa y se compone con opacidad.
@@ -1067,8 +1162,7 @@ namespace Panoptic
                 DrawText(g, m.Short, fValue13, new Rectangle(r.X, y, r.Width, S(16)), th.Text, center);
                 y += S(16) + S(10);
             }
-            using (var b = new SolidBrush(th.Dark ? Color.FromArgb(31, 255, 255, 255) : Color.FromArgb(31, 0, 0, 0)))
-                g.FillRectangle(b, cx - S(10), y - S(5), S(20), Math.Max(1, S(1)));
+            FillRectI(g, th.Dark ? Color.FromArgb(31, 255, 255, 255) : Color.FromArgb(31, 0, 0, 0), cx - S(10), y - S(5), S(20), Math.Max(1, S(1)));
             if (net != null)
             {
                 // "↓ 11,2" y la unidad abajo: no entra en una sola línea.
@@ -1084,6 +1178,12 @@ namespace Panoptic
         void Ring(Graphics g, RectangleF r, float stroke, float value, Color c)
         {
             var inner = RectangleF.Inflate(r, -stroke / 2f, -stroke / 2f);
+            if (d2d != null)
+            {
+                d2d.StrokeEllipse(inner, Track(c), stroke);
+                if (value > 0.3f) d2d.StrokeArc(inner, -90f, 360f * Math.Min(100f, value) / 100f, c, stroke);
+                return;
+            }
             using (var t = new Pen(Track(c), stroke)) g.DrawEllipse(t, inner);
             if (value > 0.3f)
                 using (var p = new Pen(c, stroke))
@@ -1148,8 +1248,7 @@ namespace Panoptic
                 DrawText(g, m.Short, fValue13, new Rectangle(x, r.Y, valW + S(8), r.Height), th.Text);
                 x += valW + S(14);
             }
-            using (var b = new SolidBrush(th.Dark ? Color.FromArgb(31, 255, 255, 255) : Color.FromArgb(31, 0, 0, 0)))
-                g.FillRectangle(b, x - S(4), cy - S(8), Math.Max(1, S(1)), S(16));
+            FillRectI(g, th.Dark ? Color.FromArgb(31, 255, 255, 255) : Color.FromArgb(31, 0, 0, 0), x - S(4), cy - S(8), Math.Max(1, S(1)), S(16));
             x += S(10);
             if (net != null) DrawText(g, "↓ " + Format.Bits(net.RecvBps), fCaption12, new Rectangle(x, r.Y, r.Right - x - S(12), r.Height), Secondary);
             AddHit("compact", r, null, "Isla: " + string.Join(", ", ms.Select(m => m.Label + " " + m.Short))).Focusable = false;
@@ -1181,6 +1280,16 @@ namespace Panoptic
             var pts = new PointF[values.Length];
             for (int i = 0; i < values.Length; i++)
                 pts[i] = new PointF(r.X + (r.Width - 1f) * i / (values.Length - 1), r.Bottom - 1 - (r.Height - 2) * Math.Min(max, values[i]) / max);
+            if (d2d != null)
+            {
+                var area = new PointF[pts.Length + 2];
+                area[0] = new PointF(pts[0].X, r.Bottom);
+                Array.Copy(pts, 0, area, 1, pts.Length);
+                area[area.Length - 1] = new PointF(pts[pts.Length - 1].X, r.Bottom);
+                d2d.FillPolygon(area, Color.FromArgb(50, c));
+                d2d.Polyline(pts, c, 1.5f * s);
+                return;
+            }
             using (var path = new GraphicsPath())
             {
                 path.AddLine(pts[0].X, r.Bottom, pts[0].X, pts[0].Y);
@@ -1248,7 +1357,7 @@ namespace Panoptic
                 string key = "cell-" + m.Id;
                 string page = m.Id == "net" ? "net" : m.Id;
                 AddHit(key, r, () => host.OpenMain(page), m.Label + " " + m.Short + ", " + m.Detail).Tip = "Abrir " + m.Label + " en el Monitor";
-                if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+                HoverFill(g, key, r, S(4));
                 float v = Value("e-" + m.Id, m.Value);
                 var rr = new RectangleF(r.X + (r.Width - S(64)) / 2f, r.Y + S(4), S(64), S(64));
                 Color c = MetricColor(m.Color);
@@ -1276,10 +1385,14 @@ namespace Panoptic
 
         void NetRow(Graphics g, Snapshot snap, Rectangle r)
         {
-            using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), S(4)))
+            var rowF = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1);
+            Color rowFill = th.Dark ? Color.FromArgb(10, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255);
+            Color rowLine = th.Dark ? Color.FromArgb(13, 255, 255, 255) : Color.FromArgb(13, 0, 0, 0);
+            if (d2d != null) { d2d.FillRound(rowF, S(4), rowFill); d2d.StrokeRound(rowF, S(4), rowLine, 1f); }
+            else using (var p = Theme.Round(rowF, S(4)))
             {
-                using (var b = new SolidBrush(th.Dark ? Color.FromArgb(10, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255))) g.FillPath(b, p);
-                using (var pen = new Pen(th.Dark ? Color.FromArgb(13, 255, 255, 255) : Color.FromArgb(13, 0, 0, 0))) g.DrawPath(pen, p);
+                using (var b = new SolidBrush(rowFill)) g.FillPath(b, p);
+                using (var pen = new Pen(rowLine)) g.DrawPath(pen, p);
             }
             var n = snap.Nets.OrderByDescending(x => x.SendBps + x.RecvBps).FirstOrDefault();
             var inner = new Rectangle(r.X + S(12), r.Y + S(8), r.Width - S(24), r.Height - S(16));
@@ -1300,7 +1413,8 @@ namespace Panoptic
                 var pts = new PointF[vals.Length];
                 for (int i = 0; i < vals.Length; i++)
                     pts[i] = new PointF(gr.X + (gr.Width - 1f) * i / (vals.Length - 1), gr.Bottom - 1 - (gr.Height - 2) * vals[i] / max);
-                using (var pen = new Pen(c, 1.5f * s)) { pen.LineJoin = LineJoin.Round; g.DrawLines(pen, pts); }
+                if (d2d != null) d2d.Polyline(pts, c, 1.5f * s);
+                else using (var pen = new Pen(c, 1.5f * s)) { pen.LineJoin = LineJoin.Round; g.DrawLines(pen, pts); }
             }
             AddHit("netrow", r, () => host.OpenMain("net"), name + ": bajada " + Format.Bits(n.RecvBps) + ", subida " + Format.Bits(n.SendBps));
         }
@@ -1313,8 +1427,7 @@ namespace Panoptic
             // La compacta queda como última fila.
             var compact = new Rectangle(0, H - S(36), W, S(36));
             PaintCompactTaskbar(g, snap, compact);
-            using (var b = new SolidBrush(th.Dark ? Color.FromArgb(18, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0)))
-                g.FillRectangle(b, pad, compact.Y - 1, W - 2 * pad, 1);
+            FillRectI(g, th.Dark ? Color.FromArgb(18, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0), pad, compact.Y - 1, W - 2 * pad, 1);
 
             // "Más consumo": los 3 procesos con más CPU.
             var top = snap.Procs.Where(p => p.Name != "Idle").OrderByDescending(p => p.Cpu).ThenByDescending(p => p.Memory).Take(3).ToList();
@@ -1334,7 +1447,7 @@ namespace Panoptic
                     m.Closed += (o, e) => { openMenu = null; BeginInvoke(new Action(m.Dispose)); };
                     m.Show(this, pt);
                 };
-                if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+                HoverFill(g, key, r, S(4));
                 var ir = new Rectangle(r.X + S(6), r.Y + S(8), S(16), S(16));
                 if (p.Icon != null) DrawIcon(g, p.Icon, ir);
                 else Glyph(g, Glyphs.App, fonts.Glyph12, ir, Secondary);
@@ -1344,8 +1457,7 @@ namespace Panoptic
                 y += S(32);
             }
             int lineY = compact.Y - S(8) - top.Count * S(32) - S(32);
-            using (var b = new SolidBrush(th.Dark ? Color.FromArgb(18, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0)))
-                g.FillRectangle(b, pad, lineY, W - 2 * pad, 1);
+            FillRectI(g, th.Dark ? Color.FromArgb(18, 255, 255, 255) : Color.FromArgb(18, 0, 0, 0), pad, lineY, W - 2 * pad, 1);
 
             // Seis filas: etiqueta y subtítulo | barra de 4 px | valor.
             var cells = Cells(snap);
@@ -1358,7 +1470,7 @@ namespace Panoptic
                 string key = "row-" + m.Id;
                 string page = m.Id;
                 AddHit(key, r, () => host.OpenMain(page), m.Label + " " + m.Short + ", " + m.Detail);
-                if (IsHover(key)) Fill(g, Rectangle.Inflate(r, S(6), 0), th.HoverOverlay, S(4));
+                HoverFill(g, key, Rectangle.Inflate(r, S(6), 0), S(4));
                 Color c = MetricColor(m.Color);
                 DrawText(g, m.Label, fCaption12, new Rectangle(r.X, r.Y + S(1), S(84), S(16)), th.Text);
                 DrawText(g, m.Detail, fSmall11, new Rectangle(r.X, r.Y + S(17), S(84), S(14)), c);
@@ -1440,7 +1552,9 @@ namespace Panoptic
                 {
                     Color bc = MetricColor(ResColors.Battery(th));
                     var body = new Rectangle(x, cy - S(6), S(22), S(12));
-                    using (var p = Theme.Round(new RectangleF(body.X + .5f, body.Y + .5f, body.Width - 1, body.Height - 1), S(2)))
+                    var bodyF = new RectangleF(body.X + .5f, body.Y + .5f, body.Width - 1, body.Height - 1);
+                    if (d2d != null) d2d.StrokeRound(bodyF, S(2), bc, 1.2f * s);
+                    else using (var p = Theme.Round(bodyF, S(2)))
                     using (var pen = new Pen(bc, 1.2f * s)) g.DrawPath(pen, p);
                     Fill(g, new Rectangle(body.Right, cy - S(3), S(2), S(6)), bc, S(1));
                     Fill(g, new Rectangle(body.X + S(2), body.Y + S(2), Math.Max(S(2), (int)((body.Width - S(4)) * c.Level / 100f)), body.Height - S(4)), bc, S(1));
@@ -1487,6 +1601,21 @@ namespace Panoptic
 
         // ================================================================== vista previa
 
+        /// <summary>Diagnóstico: dibuja el lienzo con Direct2D o con GDI+ y devuelve la imagen y los ms por cuadro.</summary>
+        internal Bitmap RenderCanvasForTest(bool useGpu, out double msPerFrame)
+        {
+            if (gpu != null) gpu.Dispose();
+            gpu = null; gpuTried = false; DisableGpu = !useGpu;
+            canvas = Rectangle.Empty; lastFrameKey = null;
+            ApplyBounds();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < 60; i++) { lastFrameKey = null; RenderLayered(); }
+            msPerFrame = sw.Elapsed.TotalMilliseconds / 60;
+            return surface == null ? null : surface.Snapshot();
+        }
+
+        internal bool UsingGpu { get { return gpu != null; } }
+
         /// <summary>Prepara un estado para exportar una captura (--render).</summary>
         internal void PreviewState(bool expand, string position, string ctxKind)
         {
@@ -1516,6 +1645,7 @@ namespace Panoptic
                 data.Dispose(); anim.Dispose(); poll.Dispose(); screenCheck.Dispose();
                 if (surface != null) surface.Dispose();
                 if (content != null) content.Dispose();
+                if (gpu != null) gpu.Dispose();
                 vibrancy.Dispose();
                 foreach (var f in new[] { fValue13, fSmall11, fDisplay16, fDisplay18, fCaption12 }) if (f != null) f.Dispose();
             }

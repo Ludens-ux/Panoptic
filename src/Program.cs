@@ -12,6 +12,7 @@ namespace Panoptic
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
+            if (args.Length >= 2 && args[0] == "--island-gpu") return Preview.IslandGpu(args);
             if (args.Length >= 2 && args[0] == "--render")
                 return Preview.Render(args);
             if (args.Length >= 2 && args[0] == "--selftest")
@@ -49,6 +50,8 @@ namespace Panoptic
 
             bool startInTray = Array.IndexOf(args, "--tray") >= 0;
             string suffix = "";
+            // PANOPTIC_NO_GPU=1: la isla se dibuja con GDI+ en lugar de Direct2D (diagnóstico o problemas de video).
+            if (Environment.GetEnvironmentVariable("PANOPTIC_NO_GPU") == "1") IslandForm.DisableGpu = true;
             string profile = Environment.GetEnvironmentVariable("PANOPTIC_PROFILE");
             if (!string.IsNullOrEmpty(profile))
             {

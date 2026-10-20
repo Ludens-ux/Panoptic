@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -197,9 +197,15 @@ namespace Panoptic
             DrawText(g, text, f, r, c, TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
         }
 
+        /// <summary>Mientras no es null, los ayudantes de dibujo usan Direct2D en lugar de GDI+ (lo activa la isla).</summary>
+        protected D2DPainter d2d;
+        /// <summary>Medir el texto con DirectWrite aunque en este momento no se esté dibujando (la isla con Direct2D).</summary>
+        protected bool useDirectWriteMetrics;
+
         protected void DrawText(Graphics g, string text, Font f, Rectangle r, Color c, TextFormatFlags align)
         {
             if (string.IsNullOrEmpty(text)) return;
+            if (d2d != null) { d2d.Text(text, f, r, c, align, true); return; }
             if (th.Glass || gdiPlusText || scaledText > 0) { GlassText(g, text, f, r, c, align, true); return; }
             TextRenderer.DrawText(g, text, f, r, c, align | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix |
                 TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
@@ -207,6 +213,7 @@ namespace Panoptic
 
         protected void Glyph(Graphics g, string glyph, Font f, Rectangle r, Color c)
         {
+            if (d2d != null) { d2d.Text(glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter, false); return; }
             if (th.Glass || gdiPlusText || scaledText > 0) { GlassText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter, false); return; }
             TextRenderer.DrawText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform |
                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
@@ -246,6 +253,7 @@ namespace Panoptic
 
         protected int MeasureText(string text, Font f)
         {
+            if (d2d != null || useDirectWriteMetrics) return (int)Math.Ceiling(D2DPainter.Measure(text, f)) + 1;
             if (th.Glass || gdiPlusText)
                 using (var g = Graphics.FromImage(measureBmp))
                 using (var sf = new StringFormat(StringFormat.GenericTypographic))
@@ -286,7 +294,8 @@ namespace Panoptic
                 }
                 sizes[r.Width] = b;
             }
-            g.DrawImageUnscaled(b, r.X, r.Y);
+            if (d2d != null) d2d.Image(b, new RectangleF(r.X, r.Y, b.Width, b.Height), 1f);
+            else g.DrawImageUnscaled(b, r.X, r.Y);
         }
 
         [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern IntPtr CreateSolidBrush(int color);
@@ -336,6 +345,7 @@ namespace Panoptic
 
         protected void Fill(Graphics g, Rectangle r, Color c, float radius)
         {
+            if (d2d != null) { if (radius <= 0) d2d.FillRect(r, c); else d2d.FillRound(r, radius, c); return; }
             using (var p = Theme.Round(new RectangleF(r.X, r.Y, r.Width, r.Height), radius))
             using (var b = new SolidBrush(c)) g.FillPath(b, p);
         }
@@ -439,7 +449,14 @@ namespace Panoptic
                 fill = th.ControlFill;
                 fg = enabled ? th.Text : th.TextDisabled;
             }
-            using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), S(4)))
+            if (d2d != null)
+            {
+                var rf = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1);
+                d2d.FillRound(rf, S(4), fill);
+                if (!accent && hv > 0.01f) d2d.FillRound(rf, S(4), hv <= 1 ? Color.FromArgb((int)(th.HoverOverlay.A * hv), th.HoverOverlay) : Lerp(th.HoverOverlay, th.PressedOverlay, hv - 1));
+                if (!accent) d2d.StrokeRound(rf, S(4), ControlStroke, 1f);
+            }
+            else using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), S(4)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, p);
                 if (!accent && hv > 0.01f)
@@ -781,6 +798,7 @@ namespace Panoptic
             if (Math.Abs(scale - 1f) > 0.001f)
             {
                 float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
+                if (d2d != null) { d2d.PushScale(scale, cx, cy); return st; }
                 g.TranslateTransform(cx, cy);
                 g.ScaleTransform(scale, scale);
                 g.TranslateTransform(-cx, -cy);
@@ -791,7 +809,7 @@ namespace Panoptic
 
         protected void EndScale(Graphics g, GraphicsState st, float scale)
         {
-            if (Math.Abs(scale - 1f) > 0.001f) scaledText--;
+            if (Math.Abs(scale - 1f) > 0.001f) { if (d2d != null) { d2d.PopTransform(); g.Restore(st); return; } scaledText--; }
             g.Restore(st);
         }
 
