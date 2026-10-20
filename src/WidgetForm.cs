@@ -301,7 +301,7 @@ namespace Panoptic
             for (int i = 0; i < hist.Length; i++) hist[i] = n.SendHistory[i] + n.RecvHistory[i];
             AddHit("row-net", r, () => host.OpenMain("net"), n.Kind + ": recibiendo " + Format.Bits(n.RecvBps) + ", enviando " + Format.Bits(n.SendBps)).Tip = "Abrir red en el Monitor";
             Card(g, r, VibrancyOn ? (th.Dark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(120, 255, 255, 255)) : th.Card);
-            if (IsHover("row-net")) Fill(g, r, th.HoverOverlay, S(6));
+            HoverFill(g, "row-net", r, S(6));
             Glyph(g, n.Kind == "Wi-Fi" ? Glyphs.Wifi : Glyphs.Ethernet, fonts.Glyph12, new Rectangle(r.X + S(10), r.Y + S(6), S(16), S(20)), secondary);
             DrawText(g, n.Kind, fonts.Caption, new Rectangle(r.X + S(32), r.Y + S(6), S(80), S(20)), secondary);
             DrawText(g, "↓ " + Format.Bits(n.RecvBps) + "   ↑ " + Format.Bits(n.SendBps), fonts.CaptionStrong,
@@ -376,7 +376,7 @@ namespace Panoptic
         {
             string key = "ring-" + page;
             AddHit(key, col, () => host.OpenMain(page), label + ": " + Format.Percent(value) + ", " + detail).Tip = "Abrir " + label + " en el Monitor";
-            if (IsHover(key)) Fill(g, Rectangle.Inflate(col, -S(2), -S(2)), th.HoverOverlay, S(6));
+            HoverFill(g, key, Rectangle.Inflate(col, -S(2), -S(2)), S(6));
 
             float v = Animated(page, value);
             float d = 76 * s, stroke = 7 * s;

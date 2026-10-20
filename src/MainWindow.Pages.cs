@@ -613,7 +613,7 @@ namespace Panoptic
                     string key = "ring-" + id;
                     var h = AddHit(key, r, () => { Settings.WidgetRing(id, !Settings.WidgetRing(id)); host.WidgetChanged(); Invalidate(); }, Settings.WidgetRingNames[i]);
                     h.Role = AccessibleRole.CheckButton; h.Checked = on;
-                    if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+                    HoverFill(g, key, r, S(4));
                     var box = new Rectangle(r.X + S(6), r.Y + (r.Height - S(18)) / 2, S(18), S(18));
                     if (on) { Fill(g, box, th.Accent, S(3)); Glyph(g, Glyphs.CheckMark, fonts.Glyph12, box, th.OnAccent); }
                     else using (var p = Theme.Round(new RectangleF(box.X + .5f, box.Y + .5f, box.Width - 1, box.Height - 1), S(3)))

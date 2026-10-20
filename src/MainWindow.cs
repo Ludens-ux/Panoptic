@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -151,6 +151,7 @@ namespace Panoptic
         {
             if (page == p) return;
             page = p;
+            SetSpring("page-enter", 0f);
             string t;
             search.Text = searchText.TryGetValue(p, out t) ? t : "";
             Invalidate();
@@ -163,7 +164,8 @@ namespace Panoptic
             var psw = System.Diagnostics.Stopwatch.StartNew();
             // Cada zona se pinta una sola vez y con copia directa (sin mezclar transparencias): limpiar toda la
             // ventana y después volver a pintar la capa de contenido costaba más de 4 ms por cuadro.
-            int navW = navExpanded ? S(220) : S(52);
+            // El panel lateral se abre y se cierra con un resorte.
+            int navW = (int)Math.Round(Spring("nav-w", navExpanded ? S(220) : S(52), 0.34f, 0.9f));
             var content = new Rectangle(navW, 0, ClientSize.Width - navW, ClientSize.Height);
             // Fondo: cada zona se pinta una sola vez con un relleno rápido (antes, limpiar y repintar costaba más de 4 ms por cuadro).
             FastFill(g, new Rectangle(0, 0, navW, ClientSize.Height), th.Clear);
@@ -199,6 +201,11 @@ namespace Panoptic
                 DrawText(g, "Midiendo…", fonts.Body, content, th.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
+            // Entrada de página: sube unos píxeles y aparece con un fundido (se puede interrumpir con otro clic).
+            float enter = Spring("page-enter", 1f, 0.42f, 0.88f);
+            var pageState = g.Save();
+            g.SetClip(content, CombineMode.Intersect);
+            if (enter < 0.999f) g.TranslateTransform(0, (float)Math.Round((1 - enter) * S(28)));
             if (page == "perf") PaintPerformance(g, content, snap);
             else if (page == "procs") PaintProcesses(g, content, snap);
             else if (page == "hist") PaintHistory(g, content);
@@ -210,6 +217,12 @@ namespace Panoptic
             else if (page == "services") PaintServices(g, content);
             else if (page == "settings") PaintSettings(g, content);
             else PaintLog(g, content);
+            g.Restore(pageState);
+            if (enter < 0.999f)
+            {
+                int a = (int)(255 * Math.Max(0, 1 - enter * 1.6f));
+                if (a > 0) using (var b = new SolidBrush(Color.FromArgb(a, th.Layer.R, th.Layer.G, th.Layer.B))) g.FillRectangle(b, new Rectangle(content.X + 1, content.Y + 1, content.Width - 1, content.Height - 1));
+            }
             Stat("4 pagina", psw);
         }
 
@@ -221,8 +234,30 @@ namespace Panoptic
             st[0]++; st[1] += sw.Elapsed.TotalMilliseconds; sw.Restart();
         }
 
+        int navSelY = -1;   // posición del ítem seleccionado (destino de la píldora que se desliza)
+
+        static readonly string[] NavKeys = { "perf", "procs", "hist", "net", "files", "usb", "power", "startup", "services", "log" };
+
         void PaintNav(Graphics g, int navW)
         {
+            // Destino de la píldora: se calcula antes de dibujar (los ítems van en este orden; Configuración, abajo).
+            int idx = Array.IndexOf(NavKeys, page);
+            int selY = page == "settings" ? ClientSize.Height - S(48) : idx >= 0 ? S(48) + idx * S(44) : -1;
+            if (selY >= 0 && navSelY != selY)
+            {
+                if (navSelY < 0) SetSpring("nav-sel", selY);
+                navSelY = selY;
+            }
+            // Píldora de selección: se desliza hasta el ítem elegido y la marca de acento se estira mientras viaja.
+            if (navSelY >= 0)
+            {
+                float ay = Spring("nav-sel", navSelY, 0.36f, 0.82f);
+                var pill = new Rectangle(S(4), (int)Math.Round(ay), navW - S(8), S(40));
+                Fill(g, pill, th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0), S(4));
+                float stretch = Math.Min(S(18), Math.Abs(ay - navSelY) * 0.35f);
+                int mh = (int)(S(16) + stretch);
+                Fill(g, new Rectangle(pill.X, pill.Y + pill.Height / 2 - mh / 2, S(3), mh), th.Accent, S(1.5f));
+            }
             int y = S(4);
             SubtleButton(g, "nav-toggle", new Rectangle(S(6), y, S(40), S(36)), Glyphs.Menu, null,
                 navExpanded ? "Contraer navegación" : "Expandir navegación", () => { navChoice = !navExpanded; Invalidate(); });
@@ -249,11 +284,20 @@ namespace Panoptic
             h.Role = AccessibleRole.PageTab;
             h.Checked = sel;
             if (!navExpanded) h.Tip = label;
-            if (sel) Fill(g, r, th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0), S(4));
-            if (IsHover(h.Key)) Fill(g, r, IsPressed(h.Key) ? th.PressedOverlay : th.HoverOverlay, S(4));
-            if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
+            HoverFill(g, h.Key, r, S(4));
+            float sc = PressScale(h.Key, 0.97f);
+            var st = BeginScale(g, r, sc);
             Glyph(g, glyph, fonts.Glyph16, new Rectangle(r.X + S(12), r.Y, S(20), r.Height), th.Text);
-            if (navExpanded) DrawText(g, label, fonts.Body, new Rectangle(r.X + S(44), r.Y, r.Width - S(48), r.Height), th.Text);
+            // Mientras el panel se abre o se cierra, el texto aparece recortado por el ancho.
+            if (navW >= S(100))
+            {
+                var tr = new Rectangle(r.X + S(44), r.Y, r.Width - S(48), r.Height);
+                var cs = g.Save();
+                g.SetClip(tr, System.Drawing.Drawing2D.CombineMode.Intersect);
+                DrawText(g, label, fonts.Body, new Rectangle(tr.X, tr.Y, Math.Max(tr.Width, S(160)), tr.Height), th.Text);
+                g.Restore(cs);
+            }
+            EndScale(g, st, sc);
             y += S(44);
         }
 
@@ -295,7 +339,7 @@ namespace Panoptic
                 var hh = AddHit(key, r, () => { resource = it.Item1; Invalidate(); }, it.Item2 + ", " + it.Item3);
                 hh.Role = AccessibleRole.ListItem; hh.Checked = sel;
                 if (sel) Fill(g, r, th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0), S(4));
-                if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+                HoverFill(g, key, r, S(4));
                 if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
                 var gr = new Rectangle(r.X + S(12), r.Y + S(10), S(64), S(40));
                 using (var b = new SolidBrush(th.GraphBg)) g.FillRectangle(b, gr);
@@ -496,13 +540,22 @@ namespace Panoptic
 
         // ------------------------------------------------------------------ desplazamiento
 
-        int ScrollPos { get { int v; return scroll.TryGetValue(page, out v) ? v : 0; } set { scroll[page] = value; } }
+        // Desplazamiento: "scroll" guarda el destino y lo que se ve lo sigue con un resorte (suave, como en iOS).
+        // Al llegar a un borde la lista se pasa un poco y vuelve (rebote).
+        int ScrollTarget { get { int v; return scroll.TryGetValue(page, out v) ? v : 0; } set { scroll[page] = value; } }
+
+        /// <summary>Posición que se dibuja. Asignarla salta sin animar (por ejemplo, al cambiar un filtro).</summary>
+        int ScrollPos
+        {
+            get { return (int)Math.Round(Spring("scroll:" + page, ScrollTarget, 0.3f, 1f)); }
+            set { ScrollTarget = value; Spring("scroll:" + page, value); SetSpring("scroll:" + page, value); }
+        }
 
         void ClampScroll()
         {
             int max = Math.Max(0, listContent - listView.Height);
-            if (ScrollPos > max) ScrollPos = max;
-            if (ScrollPos < 0) ScrollPos = 0;
+            if (ScrollTarget > max) ScrollTarget = max;
+            if (ScrollTarget < 0) ScrollTarget = 0;
         }
 
         void DrawScrollbar(Graphics g)
@@ -522,8 +575,12 @@ namespace Panoptic
         {
             base.OnMouseWheel(e);
             if (page == "perf") return;
-            ScrollPos -= e.Delta * S(96) / 120;
-            ClampScroll();
+            int max = Math.Max(0, listContent - listView.Height);
+            int want = ScrollTarget - e.Delta * S(96) / 120;
+            // Contra el borde: el destino queda en el borde y el resorte recibe un empujón (se pasa y vuelve).
+            if (want < 0 && ScrollTarget <= 0 || want > max && ScrollTarget >= max)
+                KickSpring("scroll:" + page, (want < 0 ? -1 : 1) * Math.Min(S(900), Math.Abs(e.Delta) * S(6)));
+            ScrollTarget = Math.Max(0, Math.Min(max, want));
             Invalidate();
         }
 
@@ -643,7 +700,7 @@ namespace Panoptic
                 if (sortCol == key) sortAsc = !sortAsc; else { sortCol = key; sortAsc = key == "name"; }
                 Invalidate();
             }, "Ordenar por " + label).Role = AccessibleRole.ColumnHeader;
-            if (IsHover(hk)) Fill(g, r, th.HoverOverlay, S(4));
+            HoverFill(g, hk, r, S(4));
             var flags = right ? TextFormatFlags.Right | TextFormatFlags.VerticalCenter : TextFormatFlags.Left | TextFormatFlags.VerticalCenter;
             var inner = new Rectangle(r.X + S(10), r.Y, r.Width - S(20), r.Height);
             if (total != null)
@@ -701,7 +758,7 @@ namespace Panoptic
                 m.Show(this, pt);
             };
             if (sel) Fill(g, r, th.Dark ? Color.FromArgb(22, 255, 255, 255) : Color.FromArgb(14, 0, 0, 0), S(4));
-            else if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+            else HoverFill(g, key, r, S(4));
             if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
 
             // Celdas con color según la intensidad, como el Administrador de tareas.
@@ -873,7 +930,7 @@ namespace Panoptic
                 m.Closed += (o, a) => BeginInvoke(new Action(m.Dispose));
                 m.Show(this, pt);
             };
-            if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+            HoverFill(g, key, r, S(4));
             DrawText(g, e.Time.ToString("HH:mm:ss"), fonts.Body, new Rectangle(r.X + S(12), r.Y, S(72), r.Height), th.TextSecondary);
             Color gc = e.Severity == Severity.Error ? th.Critical : e.Severity == Severity.Advertencia ? th.Caution : th.TextSecondary;
             Glyph(g, ActivityEntry.CategoryGlyph(e.Category), fonts.Glyph16, new Rectangle(r.X + S(92), r.Y, S(20), r.Height), gc);

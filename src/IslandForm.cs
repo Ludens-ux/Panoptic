@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -211,7 +211,8 @@ namespace Panoptic
             SetScale(Native.ScaleForPoint(new Point(sc.WorkingArea.X + sc.WorkingArea.Width / 2, sc.WorkingArea.Y + 5)));
             expanded = false;
             lastPos = Pos;
-            hideK = slideFrom = slideTo = 0;
+            hideK = slideFrom = slideTo = vHide = 0;
+            resizing = false; vW = vH = 0;
             autoHidden = false;
             cur = from = to = TargetSize();
             ApplyBounds();
@@ -238,6 +239,7 @@ namespace Panoptic
             lastPos = Pos;
             expanded = false;
             cur = from = to = TargetSize();
+            resizing = false; vW = vH = 0;
             canvas = Rectangle.Empty;
             lastFrameKey = null;
             ApplyBounds();
@@ -382,12 +384,31 @@ namespace Panoptic
             from = cur;
             to = t;
             if (!Native.AnimationsEnabled() || previewMode) { cur = to; ApplyBounds(); Invalidate(); return; }
-            resizeStart = Clock.Ms;
+            resizing = true;
             StartAnim();
+        }
+
+        // ---- Resortes de la isla: tamaño y deslizamiento. Interrumpibles: si cambia el destino a mitad de camino,
+        // siguen desde donde están y con la velocidad que traían (como la isla dinámica del iPhone).
+        bool resizing;
+        float vW, vH, vHide;
+        double lastAnim;
+        const float ResizeResponse = 0.5f, ResizeDamping = 0.66f;     // rebote apenas visible
+        const float SlideResponse = 0.42f, SlideDamping = 0.86f;
+
+        static bool StepSpring(ref float x, ref float v, float target, float dt, float response, float damping, float eps)
+        {
+            float w = (float)(2 * Math.PI / response), k = w * w, c = 2 * w * damping;
+            int n = Math.Max(1, (int)Math.Ceiling(dt / 0.004f));
+            float h = dt / n;
+            for (int i = 0; i < n; i++) { float a = -k * (x - target) - c * v; v += a * h; x += v * h; }
+            if (Math.Abs(x - target) < eps && Math.Abs(v) < eps * 10) { x = target; v = 0; return false; }
+            return true;
         }
 
         void StartAnim()
         {
+            if (!anim.Running) lastAnim = Clock.Ms;
             if (!anim.Running) lastValueStep = Clock.Ms; // sin esto, el primer paso "salta" todo el tiempo que estuvo quieta
             anim.Start();
         }
@@ -397,7 +418,7 @@ namespace Panoptic
             get
             {
                 double now = Clock.Ms;
-                return now - resizeStart < ResizeMs || now - fadeStart < 400 || hideK != slideTo || ValuesMoving();
+                return resizing || now - fadeStart < 400 || hideK != slideTo || vHide != 0 || ValuesMoving();
             }
         }
 
@@ -590,24 +611,24 @@ namespace Panoptic
         /// <summary>Un cuadro de animación, sincronizado con el refresco de la pantalla.</summary>
         void OnAnimate()
         {
-            double el = Clock.Ms - resizeStart;
+            double now = Clock.Ms;
+            float dt = (float)Math.Min(0.05, Math.Max(0.001, (now - lastAnim) / 1000.0));
+            lastAnim = now;
             bool resized = false;
-            if (el < ResizeMs)
+            if (resizing)
             {
-                double k = CubicBezier(el / ResizeMs, .3, 1.3, .5, 1);
-                cur = new SizeF((float)(from.Width + (to.Width - from.Width) * k), (float)(from.Height + (to.Height - from.Height) * k));
+                float w = cur.Width, h = cur.Height;
+                bool a = StepSpring(ref w, ref vW, to.Width, dt, ResizeResponse, ResizeDamping, 0.3f);
+                bool b = StepSpring(ref h, ref vH, to.Height, dt, ResizeResponse, ResizeDamping, 0.3f);
+                cur = new SizeF(w, h);
+                resizing = a || b;
                 resized = true;
             }
-            else if (cur != to) { cur = to; resized = true; }
-            // Deslizamiento al ocultarse o aparecer (sale rápido y frena al final).
-            double se = Clock.Ms - slideStart;
-            if (hideK != slideTo)
+            // Deslizamiento al ocultarse o aparecer.
+            if (hideK != slideTo || vHide != 0)
             {
-                double k = Math.Min(1, Math.Max(0, se / SlideMs));
-                k = 1 - Math.Pow(1 - k, 3);
-                hideK = (float)(slideFrom + (slideTo - slideFrom) * k);
-                if (se >= SlideMs) { hideK = slideTo; AfterSlide(); }
-                else ApplyBounds();
+                bool moving = StepSpring(ref hideK, ref vHide, slideTo, dt, SlideResponse, SlideDamping, 0.002f);
+                if (!moving) AfterSlide(); else ApplyBounds();
             }
             StepValues();
             if (layered)

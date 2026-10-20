@@ -77,7 +77,7 @@ namespace Panoptic
                     if (cur == col) tableAsc[id] = !a; else { tableSort[id] = col; tableAsc[id] = true; }
                     Invalidate();
                 }, "Ordenar por " + cols[i].Title).Role = AccessibleRole.ColumnHeader;
-                if (IsHover(hk)) Fill(g, r, th.HoverOverlay, S(4));
+                HoverFill(g, hk, r, S(4));
                 var flags = cols[i].Right ? TextFormatFlags.Right | TextFormatFlags.VerticalCenter : TextFormatFlags.Left | TextFormatFlags.VerticalCenter;
                 DrawText(g, cols[i].Title, fonts.Caption, new Rectangle(r.X + S(10), r.Y, r.Width - S(20), r.Height), th.TextSecondary, flags);
                 if (sortCol == i)
@@ -117,7 +117,7 @@ namespace Panoptic
                         Fill(g, r, th.Dark ? Color.FromArgb(22, 255, 255, 255) : Color.FromArgb(14, 0, 0, 0), S(4));
                         Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
                     }
-                    else if (IsHover(hk)) Fill(g, r, th.HoverOverlay, S(4));
+                    else HoverFill(g, hk, r, S(4));
 
                     for (int i = 0; i < cols.Count; i++)
                     {

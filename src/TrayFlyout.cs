@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
@@ -75,7 +75,7 @@ namespace Panoptic
             Activate();
             Native.SetForegroundWindow(Handle);
             refresh.Start();
-            if (animate) { slideStart = Clock.Ms; slide.Start(); }
+            if (animate) { slideStart = Clock.Ms; slideK = 0; slideV = 0; slide.Start(); }
         }
 
         internal void PrepareRender() { ClientSize = new Size(S(LogicalWidth), ContentHeight); }
@@ -95,7 +95,7 @@ namespace Panoptic
         Rectangle FlyoutBounds(out Point offset)
         {
             Rectangle wa = screen.WorkingArea, b = screen.Bounds;
-            int m = S(12), d = S(16), w = S(LogicalWidth);
+            int m = S(12), d = S(40), w = S(LogicalWidth);
             int h = Math.Min(ContentHeight, wa.Height - 2 * m);
             int x = wa.Right - w - m, y = wa.Bottom - h - m;
             offset = new Point(0, d);
@@ -106,11 +106,19 @@ namespace Panoptic
             return new Rectangle(x, y, w, h);
         }
 
+        // Entrada con un resorte (sin rebote visible): arranca rápido y se asienta suave.
+        float slideK, slideV;
+
         void OnSlide()
         {
-            float t = (float)(Clock.Ms - slideStart) / 220f;
-            if (t >= 1) { t = 1; slide.Stop(); }
-            float k = 1f - (float)Math.Pow(1 - t, 4);
+            double now = Clock.Ms;
+            float dt = (float)Math.Min(0.05, Math.Max(0.001, (now - slideStart) / 1000.0));
+            slideStart = now;
+            float w = (float)(2 * Math.PI / 0.4), kk = w * w, c = 2 * w * 0.9f;
+            int n = Math.Max(1, (int)Math.Ceiling(dt / 0.004f));
+            for (int i = 0; i < n; i++) { float a = -kk * (slideK - 1) - c * slideV; slideV += a * dt / n; slideK += slideV * dt / n; }
+            if (Math.Abs(slideK - 1) < 0.002f && Math.Abs(slideV) < 0.02f) { slideK = 1; slideV = 0; slide.Stop(); }
+            float k = slideK;
             Location = new Point(slideFrom.X + (int)Math.Round((slideTo.X - slideFrom.X) * k),
                                  slideFrom.Y + (int)Math.Round((slideTo.Y - slideFrom.Y) * k));
         }
@@ -270,7 +278,7 @@ namespace Panoptic
         {
             AddHit(key, r, () => Open(page), label + ": " + value + ", " + sub);
             Card(g, r);
-            if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(6));
+            HoverFill(g, key, r, S(6));
             Glyph(g, glyph, fonts.Glyph12, new Rectangle(r.X + S(12), r.Y + S(10), S(14), S(18)), th.TextSecondary);
             DrawText(g, label, fonts.Caption, new Rectangle(r.X + S(32), r.Y + S(10), r.Width - S(40), S(18)), th.TextSecondary);
             DrawText(g, value, fonts.Subtitle, new Rectangle(r.X + S(12), r.Y + S(28), r.Width - S(20), S(28)), th.Text);
@@ -283,7 +291,7 @@ namespace Panoptic
         {
             AddHit(key, r, () => { click(); Invalidate(); }, "Ordenar por " + text).Checked = selected;
             if (selected) Fill(g, r, th.ControlFill, S(4));
-            else if (IsHover(key)) Fill(g, r, th.HoverOverlay, S(4));
+            else HoverFill(g, key, r, S(4));
             if (selected)
             {
                 var ind = new Rectangle(r.X + r.Width / 2 - S(8), r.Bottom - S(3), S(16), S(3));
@@ -305,7 +313,7 @@ namespace Panoptic
             };
             h.Click = menu;
             h.RightClick = pt => menu();
-            if (IsHover(key)) Fill(g, r, IsPressed(key) ? th.PressedOverlay : th.HoverOverlay, S(4));
+            HoverFill(g, key, r, S(4));
             var ir = new Rectangle(r.X + S(10), r.Y + (r.Height - S(16)) / 2, S(16), S(16));
             if (p.Icon != null) DrawIcon(g, p.Icon, ir);
             else Glyph(g, Glyphs.App, fonts.Glyph16, ir, th.TextSecondary);

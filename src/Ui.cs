@@ -200,15 +200,15 @@ namespace Panoptic
         protected void DrawText(Graphics g, string text, Font f, Rectangle r, Color c, TextFormatFlags align)
         {
             if (string.IsNullOrEmpty(text)) return;
-            if (th.Glass || gdiPlusText) { GlassText(g, text, f, r, c, align, true); return; }
-            TextRenderer.DrawText(g, text, f, r, c, align | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix |
+            if (th.Glass || gdiPlusText || scaledText > 0) { GlassText(g, text, f, r, c, align, true); return; }
+            TextRenderer.DrawText(g, text, f, r, c, align | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix |
                 TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine);
         }
 
         protected void Glyph(Graphics g, string glyph, Font f, Rectangle r, Color c)
         {
-            if (th.Glass || gdiPlusText) { GlassText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter, false); return; }
-            TextRenderer.DrawText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsClipping |
+            if (th.Glass || gdiPlusText || scaledText > 0) { GlassText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter, false); return; }
+            TextRenderer.DrawText(g, glyph, f, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.PreserveGraphicsClipping | TextFormatFlags.PreserveGraphicsTranslateTransform |
                 TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
         }
 
@@ -400,8 +400,9 @@ namespace Panoptic
         protected Hit SubtleButton(Graphics g, string key, Rectangle r, string glyph, string text, string name, Action click)
         {
             var h = AddHit(key, r, click, name ?? text);
-            if (IsHover(key))
-                Fill(g, r, IsPressed(key) ? th.PressedOverlay : th.HoverOverlay, S(4));
+            float sc = PressScale(key, 0.92f);
+            var st = BeginScale(g, r, sc);
+            HoverFill(g, key, r, S(4));
             if (text == null) Glyph(g, glyph, fonts.Glyph16, r, th.Text);
             else
             {
@@ -413,6 +414,7 @@ namespace Panoptic
                 }
                 DrawText(g, text, fonts.Body, new Rectangle(x, r.Y, r.Right - x - S(8), r.Height), th.Text);
             }
+            EndScale(g, st, sc);
             if (!string.IsNullOrEmpty(name) && text == null) h.Tip = name;
             return h;
         }
@@ -422,10 +424,14 @@ namespace Panoptic
         {
             Hit h = null;
             if (enabled) h = AddHit(key, r, click, text);
+            float sc = enabled ? PressScale(key) : 1f;
+            var st = BeginScale(g, r, sc);
+            // Estado (0 normal, 1 encima, 2 presionado) con un fundido corto entre colores.
+            float hv = enabled ? Spring("h:" + key, IsHover(key) ? (IsPressed(key) ? 2f : 1f) : 0f, 0.16f) : 0f;
             Color fill, fg;
             if (accent)
             {
-                fill = !enabled ? th.AccentDisabled : IsPressed(key) ? th.AccentPressed : IsHover(key) ? th.AccentHover : th.Accent;
+                fill = !enabled ? th.AccentDisabled : hv <= 1 ? Lerp(th.Accent, th.AccentHover, hv) : Lerp(th.AccentHover, th.AccentPressed, hv - 1);
                 fg = enabled ? th.OnAccent : th.Bg;
             }
             else
@@ -436,14 +442,18 @@ namespace Panoptic
             using (var p = Theme.Round(new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1), S(4)))
             {
                 using (var b = new SolidBrush(fill)) g.FillPath(b, p);
-                if (!accent && enabled && IsHover(key))
-                    using (var b = new SolidBrush(IsPressed(key) ? th.PressedOverlay : th.HoverOverlay)) g.FillPath(b, p);
+                if (!accent && hv > 0.01f)
+                {
+                    Color o = hv <= 1 ? Color.FromArgb((int)(th.HoverOverlay.A * hv), th.HoverOverlay) : Lerp(th.HoverOverlay, th.PressedOverlay, hv - 1);
+                    using (var b = new SolidBrush(o)) g.FillPath(b, p);
+                }
                 if (!accent) using (var pen = new Pen(ControlStroke)) g.DrawPath(pen, p);
             }
             int tw = MeasureText(text, fonts.Body) + (glyph != null ? S(24) : 0);
             int x = r.X + (r.Width - tw) / 2;
             if (glyph != null) { Glyph(g, glyph, fonts.Glyph16, new Rectangle(x, r.Y, S(16), r.Height), fg); x += S(24); }
             DrawText(g, text, fonts.Body, new Rectangle(x, r.Y, r.Right - x, r.Height), fg);
+            EndScale(g, st, sc);
             return h;
         }
 
@@ -456,20 +466,28 @@ namespace Panoptic
             h.Checked = on;
             bool hot = IsHover(key), down = IsPressed(key);
             var rf = new RectangleF(tr.X + .5f, tr.Y + .5f, tr.Width - 1, tr.Height - 1);
+            // La perilla viaja con un resorte que rebota apenas; el color acompaña el recorrido.
+            float t = Spring("t:" + key, on ? 1f : 0f, 0.34f, 0.68f);
+            float tc = Math.Max(0, Math.Min(1, t));
+            float hv = Spring("h:" + key, hot ? 1f : 0f, 0.16f);
             using (var p = Theme.Round(rf, rf.Height / 2))
             {
-                if (on)
-                    using (var b = new SolidBrush(down ? th.AccentPressed : hot ? th.AccentHover : th.Accent)) g.FillPath(b, p);
-                else
+                if (hv > 0.01f) using (var b = new SolidBrush(Color.FromArgb((int)(th.HoverOverlay.A * hv * (1 - tc)), th.HoverOverlay))) g.FillPath(b, p);
+                if (tc < 0.999f) using (var pen = new Pen(Color.FromArgb((int)(255 * (1 - tc)), th.ToggleOffStroke), Math.Max(1f, s))) g.DrawPath(pen, p);
+                if (tc > 0.001f)
                 {
-                    if (hot) using (var b = new SolidBrush(th.HoverOverlay)) g.FillPath(b, p);
-                    using (var pen = new Pen(th.ToggleOffStroke, Math.Max(1f, s))) g.DrawPath(pen, p);
+                    Color onFill = down ? th.AccentPressed : Lerp(th.Accent, th.AccentHover, hv);
+                    using (var b = new SolidBrush(Color.FromArgb((int)(255 * tc), onFill))) g.FillPath(b, p);
                 }
             }
-            float kd = (hot ? 14 : 12) * s;
-            float cx = on ? rf.Right - rf.Height / 2 : rf.X + rf.Height / 2, cy = rf.Y + rf.Height / 2;
-            using (var b = new SolidBrush(on ? th.OnAccent : th.TextSecondary))
-                g.FillEllipse(b, cx - kd / 2, cy - kd / 2, kd, kd);
+            // Al pasar el mouse la perilla crece; al presionarla se estira (como en Windows 11 e iOS).
+            float kd = (12 + 2 * hv) * s;
+            float kw = kd + Spring("k:" + key, down ? 4f : 0f, 0.2f, 0.8f) * s;
+            float left = rf.X + rf.Height / 2, right = rf.Right - rf.Height / 2;
+            float cx = left + (right - left) * t, cy = rf.Y + rf.Height / 2;
+            using (var path = Theme.Round(new RectangleF(cx - kw / 2, cy - kd / 2, kw, kd), kd / 2))
+            using (var b = new SolidBrush(Lerp(th.TextSecondary, th.OnAccent, tc)))
+                g.FillPath(b, path);
             if (focusVisible && focusKey == key)
                 using (var p = Theme.Round(RectangleF.Inflate(rf, 3 * s, 3 * s), rf.Height / 2 + 3 * s))
                 using (var pen = new Pen(th.Text, 2 * s)) g.DrawPath(pen, p);
@@ -488,8 +506,8 @@ namespace Panoptic
             var pr = new Rectangle(r.Right - S(30), r.Y + S(2), S(28), r.Height - S(4));
             AddHit(key + "-", mr, minus, "Bajar " + name);
             AddHit(key + "+", pr, plus, "Subir " + name);
-            if (IsHover(key + "-")) Fill(g, mr, th.HoverOverlay, S(3));
-            if (IsHover(key + "+")) Fill(g, pr, th.HoverOverlay, S(3));
+            HoverFill(g, key + "-", mr, S(3));
+            HoverFill(g, key + "+", pr, S(3));
             Glyph(g, "", fonts.Glyph12, mr, th.Text);   // menos
             Glyph(g, "", fonts.Glyph12, pr, th.Text);   // más
             DrawText(g, value, fonts.Body, new Rectangle(mr.Right, r.Y, pr.X - mr.Right, r.Height), th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
@@ -639,9 +657,150 @@ namespace Panoptic
             public override void DoDefaultAction() { if (h.Click != null) f.BeginInvoke(h.Click); }
         }
 
+        // ================================================================== movimiento (resortes)
+        // Como en iOS: cada valor animado es un resorte con "respuesta" (cuánto tarda, en segundos) y
+        // "amortiguación" (1 = sin rebote; menos de 1 = rebota). Cambiar el destino a mitad de camino no corta
+        // la animación: sigue desde donde está y con la velocidad que traía.
+
+        sealed class SpringState { public float X, V, Target, Range = 1, Response = 0.3f, Damping = 1f; public bool Settled = true; }
+        readonly Dictionary<string, SpringState> springs = new Dictionary<string, SpringState>();
+        FrameLoop motion;
+        double motionLast;
+
+        /// <summary>Valor que va hacia <paramref name="target"/> con un resorte. Llamarlo en cada pintado.</summary>
+        protected float Spring(string key, float target, float response = 0.3f, float damping = 1f)
+        {
+            SpringState sp;
+            if (!springs.TryGetValue(key, out sp))
+            {
+                springs[key] = new SpringState { X = target, Target = target, Response = response, Damping = damping };
+                return target;
+            }
+            sp.Response = response;
+            sp.Damping = damping;
+            if (sp.Target != target)
+            {
+                sp.Range = Math.Max(Math.Abs(target - sp.X), Math.Abs(sp.V) * 0.1f);
+                sp.Target = target;
+                sp.Settled = false;
+                if (!Native.AnimationsEnabled()) { sp.X = target; sp.V = 0; sp.Settled = true; }
+                else StartMotion();
+            }
+            return sp.X;
+        }
+
+        /// <summary>Ubica el resorte en un valor sin animar (por ejemplo, el punto de partida de una entrada).</summary>
+        protected void SetSpring(string key, float value)
+        {
+            SpringState sp;
+            if (!springs.TryGetValue(key, out sp)) springs[key] = sp = new SpringState();
+            sp.X = value; sp.V = 0;
+            sp.Settled = sp.X == sp.Target;
+            if (!sp.Settled) { sp.Range = Math.Abs(sp.Target - sp.X); StartMotion(); }
+        }
+
+        /// <summary>Le suma velocidad a un resorte (el rebote al llegar al borde de una lista).</summary>
+        protected void KickSpring(string key, float velocity)
+        {
+            SpringState sp;
+            if (!springs.TryGetValue(key, out sp) || !Native.AnimationsEnabled()) return;
+            sp.V += velocity;
+            sp.Range = Math.Max(sp.Range, Math.Abs(sp.V) * 0.1f);
+            sp.Settled = false;
+            StartMotion();
+        }
+
+        protected bool SpringMoving(string key)
+        {
+            SpringState sp;
+            return springs.TryGetValue(key, out sp) && !sp.Settled;
+        }
+
+        void StartMotion()
+        {
+            if (!IsHandleCreated || IsDisposed) return;
+            if (motion == null) motion = new FrameLoop(this, MotionFrame);
+            if (!motion.Running) { motionLast = Clock.Ms; motion.Start(); }
+        }
+
+        void MotionFrame()
+        {
+            double now = Clock.Ms;
+            float dt = (float)Math.Min(0.05, Math.Max(0.001, (now - motionLast) / 1000.0));
+            motionLast = now;
+            bool any = false;
+            foreach (var sp in springs.Values)
+            {
+                if (sp.Settled) continue;
+                // k = (2π / respuesta)², c = 4π · amortiguación / respuesta (masa 1), en pasos chicos para que sea estable.
+                float w = (float)(2 * Math.PI / Math.Max(0.05f, sp.Response));
+                float k = w * w, c = 2 * w * sp.Damping;
+                int n = Math.Max(1, (int)Math.Ceiling(dt / 0.004f));
+                float h = dt / n;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = -k * (sp.X - sp.Target) - c * sp.V;
+                    sp.V += a * h;
+                    sp.X += sp.V * h;
+                }
+                float scale = Math.Max(1f, sp.Range);
+                if (Math.Abs(sp.X - sp.Target) < 0.002f * scale && Math.Abs(sp.V) < 0.02f * scale) { sp.X = sp.Target; sp.V = 0; sp.Settled = true; }
+                else any = true;
+            }
+            Invalidate();
+            if (!any) motion.Stop();
+        }
+
+        /// <summary>Fondo al pasar el mouse que aparece y se va con un fundido corto (y se aclara al presionar).</summary>
+        protected void HoverFill(Graphics g, string key, Rectangle r, float radius)
+        {
+            float a = Spring("h:" + key, IsHover(key) ? (IsPressed(key) ? 2f : 1f) : 0f, 0.16f);
+            if (a <= 0.01f) return;
+            Color c = a <= 1 ? Color.FromArgb((int)(th.HoverOverlay.A * a), th.HoverOverlay)
+                : Lerp(th.HoverOverlay, th.PressedOverlay, a - 1);
+            Fill(g, r, c, radius);
+        }
+
+        /// <summary>Mezcla dos colores, incluido el canal alfa.</summary>
+        protected static Color Lerp(Color a, Color b, float t)
+        {
+            t = Math.Max(0, Math.Min(1, t));
+            return Color.FromArgb((int)(a.A + (b.A - a.A) * t), (int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+        }
+
+        /// <summary>Escala al presionar: se achica apenas y vuelve con un rebote suave.</summary>
+        protected float PressScale(string key, float pressed = 0.96f)
+        {
+            return Spring("p:" + key, IsPressed(key) ? pressed : 1f, IsPressed(key) ? 0.14f : 0.32f, IsPressed(key) ? 1f : 0.55f);
+        }
+
+        /// <summary>Aplica una escala alrededor del centro de <paramref name="r"/>. Devuelve el estado para restaurar.</summary>
+        protected GraphicsState BeginScale(Graphics g, Rectangle r, float scale)
+        {
+            var st = g.Save();
+            if (Math.Abs(scale - 1f) > 0.001f)
+            {
+                float cx = r.X + r.Width / 2f, cy = r.Y + r.Height / 2f;
+                g.TranslateTransform(cx, cy);
+                g.ScaleTransform(scale, scale);
+                g.TranslateTransform(-cx, -cy);
+                scaledText++;
+            }
+            return st;
+        }
+
+        protected void EndScale(Graphics g, GraphicsState st, float scale)
+        {
+            if (Math.Abs(scale - 1f) > 0.001f) scaledText--;
+            g.Restore(st);
+        }
+
+        /// <summary>Mientras hay una escala aplicada, el texto se dibuja con GDI+ (el texto de GDI no se escala).</summary>
+        int scaledText;
+
         protected override void Dispose(bool disposing)
         {
-            if (disposing) { tip.Dispose(); if (fonts != null) fonts.Dispose(); }
+            if (disposing) { tip.Dispose(); if (fonts != null) fonts.Dispose(); if (motion != null) motion.Dispose(); }
             base.Dispose(disposing);
         }
     }
