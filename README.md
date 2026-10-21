@@ -1,6 +1,6 @@
 ﻿# Panoptic
 
-**Versión 1.5.0** · Autor: **@villargonza**
+**Versión 1.6.0** · Autor: **@villargonza**
 
 Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. Funciona sin permisos de administrador; las [funciones avanzadas](#funciones-de-administrador) los piden una sola vez.
 
@@ -45,7 +45,7 @@ Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de
 | **Registro** | Todo lo que pasa en la PC, agrupado por día, con filtros y búsqueda. **Exportar** genera un HTML o CSV por rango de fechas. |
 | **Configuración** | Inicio con Windows, widget, atajo de teclado, umbrales de alertas, avisos de seguridad e historial. |
 
-Rendimiento también muestra **GPU** (uso por motor y por proceso), **temperatura** del equipo y **batería** (carga, tiempo restante, potencia y salud). Procesos tiene una columna de GPU.
+Rendimiento también muestra **GPU** (uso por motor y por proceso, y su temperatura en placas dedicadas), **temperatura del CPU** (sensor ACPI del equipo) y **batería** (carga, tiempo restante, potencia y salud). Procesos tiene una columna de GPU.
 
 **Atajo de teclado:** `Ctrl + Mayús + M` abre o cierra la ventana desde cualquier programa (se cambia en Configuración).
 
@@ -91,6 +91,7 @@ Es el estilo predeterminado. En **Configuración > Widget > Estilo** se elige en
 - **Posición:** arriba, abajo (sobre la barra de tareas), a la izquierda o a la derecha. Abajo y en los costados la vista expandida usa barras y suma los 3 procesos que más consumen; en los costados la compacta es vertical.
 - **Ocultar automáticamente:** se esconde en el borde y aparece al acercar el mouse (o cuando llega una alerta).
 - **Estados contextuales** (durante unos segundos): descarga activa, temperatura alta, un proceso que usa más del 40 % de CPU durante 2 minutos (con botón Finalizar tarea), cargador conectado y USB conectado. Se encolan, los críticos van primero y no se repiten en 5 minutos.
+- **Más avisos:** cámara o micrófono en uso (con puntos de color en la compacta mientras dure), eventos del WriteBlocker (disco protegido o con escritura habilitada, modo forense), captura copiada al portapapeles (con botón Guardar), batería cargada, baja, desenchufada y ahorro de batería, red y VPN conectada o desconectada, sin internet, y volumen y brillo con su barra.
 - No aparece en la barra de tareas ni en Alt+Tab, no roba el foco y se oculta con apps en pantalla completa.
 
 ### Movimiento y dibujado
