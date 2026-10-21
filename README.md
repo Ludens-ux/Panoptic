@@ -1,6 +1,6 @@
-# Panoptic
+﻿# Panoptic
 
-**Versión 1.4.3** · Autor: **@villargonza**
+**Versión 1.5.0** · Autor: **@villargonza**
 
 Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de Windows 11. Funciona sin permisos de administrador; las [funciones avanzadas](#funciones-de-administrador) los piden una sola vez.
 
@@ -38,6 +38,8 @@ Rendimiento en vivo, procesos y registro de actividad de la PC, con el estilo de
 | **Historial** | Promedio de cada minuto de CPU, memoria, GPU, disco, red, temperatura y batería, de la última hora, 24 horas o 7 días. Al pasar el mouse muestra la hora y el valor. |
 | **Conexiones** | Conexiones TCP/UDP con el programa dueño, la dirección remota (con nombre de host) y el estado. Se puede filtrar por establecidas, en escucha y UDP. |
 | **Archivos** | Qué archivos lee y escribe cada programa (requiere las funciones de administrador). |
+| **Dispositivos USB** | Todos los discos, pendrives y teléfonos que se conectaron alguna vez (incluso antes de instalar Panoptic), con número de serie, VID:PID y primera, última conexión y desconexión. Se exporta a CSV. |
+| **Encendidos** | Encendidos, apagados y reinicios (con quién los pidió y cuánto duró cada sesión), suspensiones, apagados inesperados y pantallazos azules, de los últimos 7 días a un año. |
 | **Inicio** | Programas que arrancan con Windows (registro, carpetas de Inicio y tareas programadas), con su editor. Se pueden habilitar y deshabilitar. |
 | **Servicios** | Servicios de Windows con su estado y tipo de inicio. Se pueden iniciar, detener y reiniciar (pide permisos si hace falta). |
 | **Registro** | Todo lo que pasa en la PC, agrupado por día, con filtros y búsqueda. **Exportar** genera un HTML o CSV por rango de fechas. |
@@ -86,9 +88,15 @@ Es el estilo predeterminado. En **Configuración > Widget > Estilo** se elige en
 
 - **Compacta:** barra arriba al centro con mini anillos de CPU, memoria y temperatura, más la bajada de red. La rueda del mouse cambia la vista entre CPU·Mem·Temp, CPU·GPU·Disco y Red.
 - **Expandida** (clic, o al pasar el mouse si está activado): seis anillos con su detalle, la red con su gráfico y los botones Fijar y Abrir. Se expande con un rebote y se cierra con un clic afuera o con Esc.
-- **Sobre la barra de tareas:** la otra posición. Usa barras en lugar de anillos y suma los 3 procesos que más consumen; con clic derecho sobre uno se puede finalizar.
+- **Posición:** arriba, abajo (sobre la barra de tareas), a la izquierda o a la derecha. Abajo y en los costados la vista expandida usa barras y suma los 3 procesos que más consumen; en los costados la compacta es vertical.
+- **Ocultar automáticamente:** se esconde en el borde y aparece al acercar el mouse (o cuando llega una alerta).
 - **Estados contextuales** (durante unos segundos): descarga activa, temperatura alta, un proceso que usa más del 40 % de CPU durante 2 minutos (con botón Finalizar tarea), cargador conectado y USB conectado. Se encolan, los críticos van primero y no se repiten en 5 minutos.
 - No aparece en la barra de tareas ni en Alt+Tab, no roba el foco y se oculta con apps en pantalla completa.
+
+### Movimiento y dibujado
+
+- Las animaciones usan **resortes** como en iOS: se pueden interrumpir a mitad de camino sin saltos (isla, menú lateral, cambio de página, desplazamiento con rebote en los bordes, botones e interruptores).
+- Todo se dibuja con la **placa de video (Direct2D)** y el texto con **DirectWrite** (ClearType en ventanas opacas). Si no está disponible (por ejemplo, en escritorio remoto) se usa GDI+ automáticamente; `PANOPTIC_NO_GPU=1` lo fuerza.
 
 ### Widget
 

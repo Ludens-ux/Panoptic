@@ -1,6 +1,6 @@
 # Política de privacidad de Panoptic
 
-*Última actualización: 17 de octubre de 2026*
+*Última actualización: 20 de octubre de 2026*
 
 Panoptic es un monitor del sistema para Windows desarrollado por @villargonza. Esta política explica qué datos usa el programa, dónde quedan y quién puede verlos.
 
@@ -18,6 +18,8 @@ Para mostrar el estado de la PC, Panoptic lee información del propio Windows:
 - **Programas en ejecución:** nombre, ruta, uso de recursos y conexiones de red de cada proceso.
 - **Red:** adaptadores, dirección IP local y nombre de la red Wi-Fi.
 - **Eventos del sistema:** dispositivos USB conectados, suspensión, bloqueo de sesión, errores del Visor de eventos, programas de inicio y servicios.
+- **Historial de dispositivos USB:** marca, modelo, número de serie y fechas de conexión de los discos, pendrives y teléfonos que Windows tiene registrados, incluso de antes de instalar Panoptic. Solo se muestran; no se guardan aparte.
+- **Encendidos y fallas:** encendidos, apagados, reinicios (con el programa y el usuario que los pidieron), suspensiones, apagados inesperados y pantallazos azules, leídos del registro "Sistema" de Windows. Solo se muestran; no se guardan aparte.
 
 Si activás las **funciones de administrador**, además lee:
 
