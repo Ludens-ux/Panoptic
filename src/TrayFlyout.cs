@@ -208,13 +208,14 @@ namespace Panoptic
                 int y3 = y + 2 * (tH + gap);
                 if (snap.GpuAvailable)
                     Tile(g, "t-gpu", new Rectangle(pad, y3, tw, tH), Glyphs.Gpu, "GPU", Format.Percent(snap.Gpu),
-                        Format.Bytes(snap.GpuDedicated + snap.GpuShared) + " en uso", snap.GpuHistory, 100, ResColors.Gpu(th), "gpu");
+                        Format.Bytes(snap.GpuDedicated + snap.GpuShared) + " en uso" + (double.IsNaN(snap.GpuTemperature) ? "" : " · " + snap.GpuTemperature.ToString("0") + " °C"),
+                        snap.GpuHistory, 100, ResColors.Gpu(th), "gpu");
                 if (snap.HasBattery)
                     Tile(g, "t-bat", new Rectangle(pad + tw + gap, y3, tw, tH), Glyphs.Battery, "Batería", snap.BatteryPercent.ToString("0") + " %",
                         snap.OnAc ? (snap.Charging ? "Cargando" : "Enchufada") : (snap.BatteryMinutes > 0 ? (snap.BatteryMinutes / 60) + " h " + (snap.BatteryMinutes % 60) + " min restantes" : "Con batería"),
                         snap.BatteryHistory, 100, ResColors.Battery(th), "bat");
                 else if (!double.IsNaN(snap.Temperature))
-                    Tile(g, "t-temp", new Rectangle(pad + tw + gap, y3, tw, tH), Glyphs.Temperature, "Temperatura", snap.Temperature.ToString("0") + " °C",
+                    Tile(g, "t-temp", new Rectangle(pad + tw + gap, y3, tw, tH), Glyphs.Temperature, "Temperatura CPU", snap.Temperature.ToString("0") + " °C",
                         "Sensor del equipo", snap.TempHistory, 110, ResColors.Temp(th), "temp");
             }
             y += 3 * tH + 2 * gap + S(6);

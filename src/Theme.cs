@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using Microsoft.Win32;
@@ -245,6 +245,7 @@ namespace Panoptic
         public const string Stop = "";
         public const string Restart = "";
         public const string Shield = "";
+        public const string Camera = "\uE722", Microphone = "\uE720", Volume = "\uE767", Mute = "\uE74F", Brightness = "\uE706", Photo = "\uE91B", Vpn = "\uE705";
         public const string Firewall = "";
     }
 

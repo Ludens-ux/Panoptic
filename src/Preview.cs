@@ -175,6 +175,19 @@ namespace Panoptic
                 Tuple.Create("izquierda", false, "Left", (string)null),
                 Tuple.Create("temperatura", false, "Top", "temp"),
                 Tuple.Create("cargador", false, "Top", "charger"),
+                Tuple.Create("camara", false, "Top", "camera"),
+                Tuple.Create("microfono", false, "Top", "mic"),
+                Tuple.Create("wb-protegido", false, "Top", "wbok"),
+                Tuple.Create("wb-escritura", false, "Top", "wbrw"),
+                Tuple.Create("captura", false, "Top", "shot"),
+                Tuple.Create("bateria-llena", false, "Top", "batfull"),
+                Tuple.Create("bateria-baja", false, "Top", "batlow"),
+                Tuple.Create("vpn", false, "Top", "vpn"),
+                Tuple.Create("sin-internet", false, "Top", "offline"),
+                Tuple.Create("volumen", false, "Top", "volume"),
+                Tuple.Create("brillo", false, "Top", "brightness"),
+                Tuple.Create("puntos", false, "Top", "dots"),
+                Tuple.Create("puntos-costado", false, "Left", "dots"),
             };
             try
             {

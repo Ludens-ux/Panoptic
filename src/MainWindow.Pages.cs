@@ -22,6 +22,7 @@ namespace Panoptic
             Stats(g, b, y, new[]
             {
                 new[] { "Uso", Format.Percent(snap.Gpu) },
+                new[] { "Temperatura", double.IsNaN(snap.GpuTemperature) ? "—" : snap.GpuTemperature.ToString("0") + " °C" },
                 new[] { "Memoria dedicada", Format.Bytes(snap.GpuDedicated) },
                 new[] { "Memoria compartida", Format.Bytes(snap.GpuShared) },
                 new[] { "Más uso", top != null ? top.Display : "—" },
@@ -33,7 +34,7 @@ namespace Panoptic
 
         void DetailTemp(Graphics g, Rectangle r, Snapshot snap)
         {
-            var b = DetailHeader(g, r, "Temperatura", "Zona térmica ACPI");
+            var b = DetailHeader(g, r, "Temperatura CPU", "Sensor térmico del equipo (ACPI)");
             int gh = Math.Max(S(120), b.Height - S(250));
             float[] hist = snap.TempHistory;
             int y = BigGraph(g, b, b.Y, gh, "Temperatura (°C)", "110 °C", hist, 110, ResColors.Temp(th), null);
@@ -104,7 +105,7 @@ namespace Panoptic
             float netMax = Math.Max(125000f, pts.Count > 0 ? (float)pts.Max(p => p.NetBps) * 1.15f : 125000f);
             charts.Add(Tuple.Create("Red", (Func<HistoryPoint, float>)(p => (float)p.NetBps), netMax, ResColors.Net(th), (Func<float, string>)(v => Format.Bits(v))));
             if (pts.Any(p => !float.IsNaN(p.Temp)))
-                charts.Add(Tuple.Create("Temperatura", (Func<HistoryPoint, float>)(p => p.Temp), 110f, ResColors.Temp(th), (Func<float, string>)(v => v.ToString("0") + " °C")));
+                charts.Add(Tuple.Create("Temperatura CPU", (Func<HistoryPoint, float>)(p => p.Temp), 110f, ResColors.Temp(th), (Func<float, string>)(v => v.ToString("0") + " °C")));
             if (pts.Any(p => !float.IsNaN(p.Battery)))
                 charts.Add(Tuple.Create("Batería", (Func<HistoryPoint, float>)(p => p.Battery), 100f, ResColors.Battery(th), (Func<float, string>)(v => v.ToString("0") + " %")));
 
@@ -634,7 +635,7 @@ namespace Panoptic
             stepper(Glyphs.Cpu, "Duración", "Segundos seguidos por encima del límite de CPU", Settings.CpuSeconds + " s", () => Settings.CpuSeconds = clamp(Settings.CpuSeconds - 5, 5, 300), () => Settings.CpuSeconds = clamp(Settings.CpuSeconds + 5, 5, 300));
             stepper(Glyphs.Memory, "Memoria", "Avisar cuando supere este uso", Settings.MemThreshold + " %", () => Settings.MemThreshold = clamp(Settings.MemThreshold - 5, 30, 100), () => Settings.MemThreshold = clamp(Settings.MemThreshold + 5, 30, 100));
             stepper(Glyphs.Gpu, "GPU", "Avisar cuando supere este uso durante 15 segundos", Settings.GpuThreshold + " %", () => Settings.GpuThreshold = clamp(Settings.GpuThreshold - 5, 30, 100), () => Settings.GpuThreshold = clamp(Settings.GpuThreshold + 5, 30, 100));
-            stepper(Glyphs.Temperature, "Temperatura", "Avisar a partir de esta temperatura", Settings.TempThreshold + " °C", () => Settings.TempThreshold = clamp(Settings.TempThreshold - 5, 50, 110), () => Settings.TempThreshold = clamp(Settings.TempThreshold + 5, 50, 110));
+            stepper(Glyphs.Temperature, "Temperatura CPU", "Avisar a partir de esta temperatura", Settings.TempThreshold + " °C", () => Settings.TempThreshold = clamp(Settings.TempThreshold - 5, 50, 110), () => Settings.TempThreshold = clamp(Settings.TempThreshold + 5, 50, 110));
             stepper(Glyphs.HardDrive, "Espacio libre mínimo", "Avisar cuando un disco tenga menos espacio libre", Settings.DiskFreePercent + " %", () => Settings.DiskFreePercent = clamp(Settings.DiskFreePercent - 1, 1, 50), () => Settings.DiskFreePercent = clamp(Settings.DiskFreePercent + 1, 1, 50));
             stepper(Glyphs.Battery, "Batería baja", "Avisar al bajar de esta carga sin estar enchufada", Settings.BatteryLow + " %", () => Settings.BatteryLow = clamp(Settings.BatteryLow - 5, 5, 50), () => Settings.BatteryLow = clamp(Settings.BatteryLow + 5, 5, 50));
 

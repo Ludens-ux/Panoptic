@@ -316,9 +316,9 @@ namespace Panoptic
             items.Add(Tuple.Create("cpu", "CPU", Format.Percent(snap.Cpu) + (snap.CpuMhz > 0 ? "  " + Format.Ghz(snap.CpuMhz) : ""), snap.CpuHistory, 100f, ResColors.Cpu(th)));
             items.Add(Tuple.Create("mem", "Memoria", Format.Bytes(snap.MemUsed) + " / " + Format.Bytes(snap.MemTotal) + " (" + snap.MemPercent.ToString("0") + " %)", snap.MemHistory, 100f, ResColors.Memory(th)));
             if (snap.GpuAvailable)
-                items.Add(Tuple.Create("gpu", "GPU", Format.Percent(snap.Gpu) + "  " + Short(snap.GpuName), snap.GpuHistory, 100f, ResColors.Gpu(th)));
+                items.Add(Tuple.Create("gpu", "GPU", Format.Percent(snap.Gpu) + (double.IsNaN(snap.GpuTemperature) ? "" : "  " + snap.GpuTemperature.ToString("0") + " °C") + "  " + Short(snap.GpuName), snap.GpuHistory, 100f, ResColors.Gpu(th)));
             if (!double.IsNaN(snap.Temperature))
-                items.Add(Tuple.Create("temp", "Temperatura", snap.Temperature.ToString("0") + " °C", snap.TempHistory, 110f, ResColors.Temp(th)));
+                items.Add(Tuple.Create("temp", "Temperatura CPU", snap.Temperature.ToString("0") + " °C", snap.TempHistory, 110f, ResColors.Temp(th)));
             if (snap.HasBattery)
                 items.Add(Tuple.Create("bat", "Batería", snap.BatteryPercent.ToString("0") + " %" + (snap.OnAc ? (snap.Charging ? "  cargando" : "  enchufada") : "  con batería"),
                     snap.BatteryHistory, 100f, ResColors.Battery(th)));

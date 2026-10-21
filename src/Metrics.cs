@@ -96,7 +96,8 @@ namespace Panoptic
         public ulong GpuDedicated, GpuShared;
         public bool GpuAvailable;
 
-        public double Temperature = double.NaN;
+        public double Temperature = double.NaN;      // CPU (sensor ACPI del equipo)
+        public double GpuTemperature = double.NaN;   // GPU dedicada (NaN si el driver no la informa)
         public float[] TempHistory;
 
         public bool HasBattery, OnAc, Charging;
@@ -287,6 +288,7 @@ namespace Panoptic
                 s.GpuName = gpu.Name;
                 s.GpuDedicated = gpu.Dedicated;
                 s.GpuShared = gpu.Shared;
+                s.GpuTemperature = gpu.Temperature;
             }
             s.GpuEngine = engine;
             gpuHist.Add(s.Gpu);
@@ -682,7 +684,7 @@ namespace Panoptic
             int tempT = Settings.TempThreshold;
             if (!double.IsNaN(s.Temperature))
             {
-                if (!tempAlerted && s.Temperature >= tempT) { tempAlerted = true; Alert("Temperatura alta: " + s.Temperature.ToString("0") + " °C"); }
+                if (!tempAlerted && s.Temperature >= tempT) { tempAlerted = true; Alert("Temperatura alta del CPU: " + s.Temperature.ToString("0") + " °C"); }
                 else if (tempAlerted && s.Temperature < tempT - 8) tempAlerted = false;
             }
 

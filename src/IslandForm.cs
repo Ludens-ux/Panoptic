@@ -15,7 +15,7 @@ namespace Panoptic
     /// rebote para mostrar todas las métricas, y que muestra eventos contextuales durante unos segundos.
     /// Ver ISLA_DINAMICA.md.
     /// </summary>
-    internal sealed class IslandForm : Surface
+    internal sealed partial class IslandForm : Surface
     {
         readonly IHost host;
         readonly Timer data = new Timer(), poll = new Timer(), screenCheck = new Timer();
@@ -114,6 +114,7 @@ namespace Panoptic
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
+            try { AddClipboardFormatListener(Handle); } catch { }
             if (layered) BeginInvoke(new Action(ApplyBounds)); // ubicar el lienzo y dibujar apenas existe la ventana
         }
 
@@ -222,12 +223,14 @@ namespace Panoptic
             data.Start();
             screenCheck.Start();
             UpdatePolling();
+            StartLevels();
         }
 
         public void HideIsland()
         {
             islandOn = false;
             data.Stop(); anim.Stop(); poll.Stop(); screenCheck.Stop();
+            StopLevels();
             Hide();
         }
 
@@ -261,7 +264,8 @@ namespace Panoptic
         protected override void WndProc(ref Message m)
         {
             const int WM_DPICHANGED = 0x02E0, WM_SETTINGCHANGE = 0x001A, WM_ERASEBKGND = 0x0014;
-            if (m.Msg == WM_ERASEBKGND) { m.Result = (IntPtr)1; return; }   // sin borrar: evita el parpadeo al agrandar
+            if (m.Msg == WM_ERASEBKGND) { m.Result = (IntPtr)1; return; }
+            if (m.Msg == WM_CLIPBOARDUPDATE) { BeginInvoke(new Action(OnClipboardChanged)); return; }   // sin borrar: evita el parpadeo al agrandar
             if (m.Msg == WM_DPICHANGED)
             {
                 SetScale((m.WParam.ToInt64() & 0xFFFF) / 96f);
@@ -842,6 +846,8 @@ namespace Panoptic
             lastData = DateTime.Now;
             if (snap != null && Settings.IslandAlerts)
             {
+                CheckSystemEvents(snap);
+
                 // Descarga activa: bajada de más de 5 MB/s durante 5 s; se muestra mientras dure.
                 var net = snap.Nets.OrderByDescending(n => n.RecvBps).FirstOrDefault();
                 if (net != null && net.RecvBps > 5 * 1048576) downloadSeconds++; else downloadSeconds = 0;
@@ -861,7 +867,7 @@ namespace Panoptic
                         Enqueue(new Ctx
                         {
                             Kind = "temp", Key = "temp", Critical = true, Height = 44, Seconds = 10,
-                            Value = snap.Temperature.ToString("0") + "°", Title = "Temperatura alta", Subtitle = "Supera el umbral de " + limit + "°",
+                            Value = snap.Temperature.ToString("0") + "°", Title = "Temperatura alta del CPU", Subtitle = "Supera el umbral de " + limit + "°",
                             Button = "Ver", ButtonAction = () => host.OpenMain("temp")
                         });
                     }
@@ -913,7 +919,13 @@ namespace Panoptic
         /// <summary>Dispositivos USB: toma los eventos del registro de actividad.</summary>
         void OnActivity(ActivityEntry e)
         {
-            if (e.Category != Category.Dispositivo || (DateTime.Now - e.Time).TotalSeconds > 10) return;
+            if ((DateTime.Now - e.Time).TotalSeconds > 10) return;
+            if (e.Category == Category.Bloqueo || e.Category == Category.Red)
+            {
+                try { BeginInvoke(new Action(() => { if (e.Category == Category.Bloqueo) OnWriteBlocker(e); else OnNetworkActivity(e.Message); })); } catch { }
+                return;
+            }
+            if (e.Category != Category.Dispositivo) return;
             try
             {
                 BeginInvoke(new Action(() =>
@@ -1124,6 +1136,7 @@ namespace Panoptic
             if (Top) PaintCompactTop(g, snap, AreaRect);
             else if (Side) PaintCompactSide(g, snap, AreaRect);
             else PaintCompactTaskbar(g, snap, AreaRect);
+            PaintPrivacyDots(g);
         }
 
         // ---- Compacta (costados): vertical
@@ -1319,7 +1332,7 @@ namespace Panoptic
                 list.Add(new Metric { Id = "gpu", Label = "GPU", Value = snap.Gpu, Short = snap.Gpu.ToString("0") + "%", Color = ResColors.Gpu(th),
                     Detail = Format.Bytes(snap.GpuDedicated + snap.GpuShared) });
             if (!double.IsNaN(snap.Temperature))
-                list.Add(new Metric { Id = "temp", Label = "Temp.", Value = (float)Math.Min(100, snap.Temperature), Short = snap.Temperature.ToString("0") + "°", Color = ResColors.Temp(th),
+                list.Add(new Metric { Id = "temp", Label = "Temp. CPU", Value = (float)Math.Min(100, snap.Temperature), Short = snap.Temperature.ToString("0") + "°", Color = ResColors.Temp(th),
                     Detail = snap.Temperature >= Settings.TempThreshold ? "Alta" : "Normal" });
             if (snap.HasBattery)
                 list.Add(new Metric { Id = "bat", Label = "Batería", Value = snap.BatteryPercent, Short = snap.BatteryPercent.ToString("0") + "%", Color = ResColors.Battery(th),
@@ -1488,6 +1501,11 @@ namespace Panoptic
         float ContextWidth(Ctx c)
         {
             float w = 16;
+            if (c.Kind == "level") return 300;
+            if (c.Kind == "shot")
+                return 10 + 56 + 12 + Math.Max(MeasureText(c.Title, fValue13), MeasureText(c.Subtitle ?? "", fSmall11)) / s + 16 + MeasureText(c.Button, fonts.Body) / s + 28 + 8;
+            if (c.Button != null && c.Kind != "temp" && c.Kind != "hog")
+                return Math.Max(200, 16 + 18 + 10 + Math.Max(MeasureText(c.Title, fValue13), MeasureText(c.Subtitle ?? "", fSmall11)) / s + 16 + MeasureText(c.Button, fonts.Body) / s + 28 + 8);
             switch (c.Kind)
             {
                 case "download":
@@ -1514,6 +1532,16 @@ namespace Panoptic
             var r = AreaRect;
             int x = r.X + S(16), cy = r.Y + r.Height / 2;
             Color sec = Secondary;
+            if (c.Kind == "level") { PaintLevel(g, c); return; }
+            if (c.Kind == "shot") { PaintShot(g, c); return; }
+            if (c.Button != null && c.Kind != "temp" && c.Kind != "hog")
+            {
+                // Aviso con botón: ícono, dos líneas y el botón a la derecha.
+                Glyph(g, c.Glyph ?? Glyphs.Info, fonts.Glyph16, new Rectangle(x, cy - S(9), S(18), S(18)), c.Accent ?? th.Text);
+                TwoLines(g, c, x + S(18) + S(10), r);
+                ContextButton(g, c, r);
+                return;
+            }
             switch (c.Kind)
             {
                 case "download":
@@ -1567,7 +1595,7 @@ namespace Panoptic
                 }
                 default:
                 {
-                    Glyph(g, c.Glyph ?? Glyphs.Info, fonts.Glyph16, new Rectangle(x, cy - S(9), S(18), S(18)), th.Text);
+                    Glyph(g, c.Glyph ?? Glyphs.Info, fonts.Glyph16, new Rectangle(x, cy - S(9), S(18), S(18)), c.Accent ?? th.Text);
                     x += S(18) + S(10);
                     DrawText(g, c.Title, fValue13, new Rectangle(x, r.Y + S(3), r.Right - x - S(12), r.Height / 2), th.Text, TextFormatFlags.Left | TextFormatFlags.Bottom);
                     DrawText(g, c.Subtitle, fCaption12, new Rectangle(x, cy, r.Right - x - S(12), r.Height / 2 - S(3)), sec, TextFormatFlags.Left | TextFormatFlags.Top);
@@ -1630,6 +1658,26 @@ namespace Panoptic
                 case "temp": active = new Ctx { Kind = "temp", Key = "temp", Critical = true, Height = 44, Value = "92°", Title = "Temperatura alta", Subtitle = "Supera el umbral de 85°", Button = "Ver" }; break;
                 case "hog": active = new Ctx { Kind = "hog", Key = "hog", Height = 44, Glyph = Glyphs.App, Title = "msedge.exe", Subtitle = "48 % CPU durante 2 min", Button = "Finalizar tarea", Primary = true }; break;
                 case "charger": active = new Ctx { Kind = "charger", Key = "charger", Height = 38, Level = 72, Value = "72 %", Title = "Cargando · lleno en 48 min" }; break;
+                case "camera": active = new Ctx { Kind = "privacy", Key = "cam", Glyph = Glyphs.Camera, Accent = CameraColor, Title = "Cámara en uso", Subtitle = "Microsoft Teams" }; camOn = true; break;
+                case "mic": active = new Ctx { Kind = "privacy", Key = "mic", Glyph = Glyphs.Microphone, Accent = MicColor, Title = "Micrófono en uso", Subtitle = "Google Chrome" }; micOn = true; break;
+                case "wbok": active = WbCtx("wb1", "Disco protegido", "Kingston DataTraveler 3.0 · automáticamente", false); break;
+                case "wbrw": active = WbCtx("wb2", "Disco con escritura habilitada", "WDC WD10EZEX-08WN4A0", true); break;
+                case "shot":
+                {
+                    var thumb = new Bitmap(S(56), S(34));
+                    using (var tg = Graphics.FromImage(thumb))
+                    using (var lb = new System.Drawing.Drawing2D.LinearGradientBrush(new Rectangle(0, 0, thumb.Width, thumb.Height), Color.FromArgb(0, 120, 212), Color.FromArgb(180, 60, 140), 30f))
+                        tg.FillRectangle(lb, 0, 0, thumb.Width, thumb.Height);
+                    active = new Ctx { Kind = "shot", Key = "shot", Icon = thumb, Height = 46, Title = "Captura copiada", Subtitle = "1920 × 1080 · en el portapapeles", Button = "Guardar", Primary = true };
+                    break;
+                }
+                case "batfull": active = new Ctx { Kind = "info", Key = "batfull", Glyph = Glyphs.Battery, Accent = ResColors.Battery(th), Title = "Batería cargada", Subtitle = "100 % · ya podés desenchufar" }; break;
+                case "batlow": active = new Ctx { Kind = "info", Key = "batlow", Glyph = Glyphs.Battery, Critical = true, Title = "Batería baja · 9 %", Subtitle = "18 min restantes", Button = "Ahorro" }; break;
+                case "vpn": active = new Ctx { Kind = "info", Key = "vpn", Glyph = Glyphs.Vpn, Accent = th.Accent, Title = "VPN conectada", Subtitle = "WireGuard Tunnel" }; break;
+                case "offline": active = new Ctx { Kind = "info", Key = "off", Glyph = Glyphs.Globe, Critical = true, Title = "Sin internet", Subtitle = "Wi-Fi \"Casa\" conectado, pero sin salida" }; break;
+                case "volume": active = new Ctx { Kind = "level", Key = "volume", Glyph = Glyphs.Volume, Title = "Volumen", Level = 64, Value = "64 %" }; break;
+                case "brightness": active = new Ctx { Kind = "level", Key = "brightness", Glyph = Glyphs.Brightness, Title = "Brillo", Level = 80, Value = "80 %" }; break;
+                case "dots": camOn = micOn = true; break;
                 case "usb": active = new Ctx { Kind = "usb", Key = "usb", Glyph = Glyphs.Usb, Title = "Kingston DataTraveler", Subtitle = "conectado · E: 28,6 GB libres", Height = 38 }; break;
             }
             cur = from = to = TargetSize();
@@ -1643,6 +1691,9 @@ namespace Panoptic
                 SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
                 Activity.Added -= OnActivity;
                 data.Dispose(); anim.Dispose(); poll.Dispose(); screenCheck.Dispose();
+                volumeTimer.Dispose();
+                if (brightnessWatcher != null) try { brightnessWatcher.Stop(); brightnessWatcher.Dispose(); } catch { }
+                try { RemoveClipboardFormatListener(Handle); } catch { }
                 if (surface != null) surface.Dispose();
                 if (content != null) content.Dispose();
                 if (gpu != null) gpu.Dispose();

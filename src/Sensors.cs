@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -13,8 +13,10 @@ namespace Panoptic
         Dictionary<string, CounterSample> last = new Dictionary<string, CounterSample>();
         public string Name;
         public bool Available = true;
-        DateTime lastMem = DateTime.MinValue;
+        DateTime lastMem = DateTime.MinValue, lastTemp = DateTime.MinValue;
         public ulong Dedicated, Shared;
+        /// <summary>Temperatura de la GPU en °C (NaN si el driver no la informa, por ejemplo en gráficos integrados).</summary>
+        public double Temperature = double.NaN;
 
         public GpuSensor()
         {
@@ -27,6 +29,7 @@ namespace Panoptic
         {
             perPid = new Dictionary<int, float>();
             busiestEngine = null;
+            if ((DateTime.UtcNow - lastTemp).TotalSeconds >= 2) { lastTemp = DateTime.UtcNow; Temperature = GpuThermal.Read(); }
             if (!Available) return 0;
             InstanceDataCollection data;
             try
@@ -122,6 +125,90 @@ namespace Panoptic
         }
 
         static int ParseInt(string s) { int v; return int.TryParse(s, out v) ? v : -1; }
+    }
+
+    /// <summary>
+    /// Temperatura de la GPU con la misma interfaz que usa el Administrador de tareas (D3DKMT, WDDM 2.4 o
+    /// posterior). Sin permisos de administrador ni drivers extra. La informan las placas de video dedicadas;
+    /// los gráficos integrados en el procesador normalmente no.
+    /// </summary>
+    internal static class GpuThermal
+    {
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct AdapterInfo { public uint Handle; public uint LuidLow; public int LuidHigh; public uint NumSources; public int PrecisePresent; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct EnumAdapters2 { public uint Count; public IntPtr Adapters; }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct QueryAdapterInfo { public uint Adapter; public int Type; public IntPtr Data; public uint Size; }
+
+        // D3DKMT_ADAPTER_PERFDATA: la temperatura viene en décimas de grado.
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct PerfData
+        {
+            public uint PhysicalAdapterIndex;
+            public ulong MemoryFrequency, MaxMemoryFrequency, MaxMemoryFrequencyOC, MemoryBandwidth, PcieBandwidth;
+            public uint FanRpm, Power, Temperature;
+            public byte PowerStateOverride;
+        }
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        struct CloseAdapter { public uint Adapter; }
+
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern int D3DKMTEnumAdapters2(ref EnumAdapters2 e);
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern int D3DKMTQueryAdapterInfo(ref QueryAdapterInfo q);
+        [System.Runtime.InteropServices.DllImport("gdi32.dll")] static extern int D3DKMTCloseAdapter(ref CloseAdapter c);
+
+        const int KMTQAITYPE_ADAPTERPERFDATA = 62;
+        static bool unsupported;
+
+        /// <summary>La temperatura más alta entre las placas de video que la informan, o NaN.</summary>
+        public static double Read()
+        {
+            if (unsupported) return double.NaN;
+            var en = new EnumAdapters2();
+            try
+            {
+                if (D3DKMTEnumAdapters2(ref en) != 0 || en.Count == 0) return double.NaN;
+            }
+            catch { unsupported = true; return double.NaN; }   // Windows sin WDDM 2.4
+
+            int size = System.Runtime.InteropServices.Marshal.SizeOf(typeof(AdapterInfo));
+            en.Adapters = System.Runtime.InteropServices.Marshal.AllocHGlobal(size * (int)en.Count);
+            IntPtr perf = System.Runtime.InteropServices.Marshal.AllocHGlobal(System.Runtime.InteropServices.Marshal.SizeOf(typeof(PerfData)));
+            double best = double.NaN;
+            try
+            {
+                if (D3DKMTEnumAdapters2(ref en) != 0) return double.NaN;
+                for (int i = 0; i < en.Count; i++)
+                {
+                    var a = (AdapterInfo)System.Runtime.InteropServices.Marshal.PtrToStructure(en.Adapters + i * size, typeof(AdapterInfo));
+                    try
+                    {
+                        // Cada adaptador puede tener varias GPU físicas (por ejemplo, SLI): se consultan las primeras.
+                        for (uint phys = 0; phys < 4; phys++)
+                        {
+                            var pd = new PerfData { PhysicalAdapterIndex = phys };
+                            System.Runtime.InteropServices.Marshal.StructureToPtr(pd, perf, false);
+                            var q = new QueryAdapterInfo { Adapter = a.Handle, Type = KMTQAITYPE_ADAPTERPERFDATA, Data = perf, Size = (uint)System.Runtime.InteropServices.Marshal.SizeOf(typeof(PerfData)) };
+                            if (D3DKMTQueryAdapterInfo(ref q) != 0) break;
+                            pd = (PerfData)System.Runtime.InteropServices.Marshal.PtrToStructure(perf, typeof(PerfData));
+                            double c = pd.Temperature / 10.0;
+                            if (c > 1 && c < 150 && (double.IsNaN(best) || c > best)) best = c;
+                        }
+                    }
+                    finally { var ca = new CloseAdapter { Adapter = a.Handle }; D3DKMTCloseAdapter(ref ca); }
+                }
+            }
+            catch { }
+            finally
+            {
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(en.Adapters);
+                System.Runtime.InteropServices.Marshal.FreeHGlobal(perf);
+            }
+            return best;
+        }
     }
 
     /// <summary>Temperatura de las zonas térmicas ACPI (contador "Thermal Zone Information", sin permisos de administrador).</summary>

@@ -183,7 +183,7 @@ namespace Panoptic
                         sb.AppendLine("PROC " + p.Display + " | " + p.Cpu + " % | " + Format.Bytes(p.Memory) + " | app " + p.IsApp + " | icon " + (p.Icon != null));
                     sb.AppendLine("APPS " + System.Linq.Enumerable.Count(x.Procs, q => q.IsApp));
                     sb.AppendLine("GPU " + x.GpuAvailable + " " + x.Gpu + " % " + x.GpuName + " motor " + x.GpuEngine + " ded " + Format.Bytes(x.GpuDedicated) + " sh " + Format.Bytes(x.GpuShared));
-                    sb.AppendLine("TEMP " + x.Temperature);
+                    sb.AppendLine("TEMP CPU " + x.Temperature + " · GPU " + x.GpuTemperature + " · lectura directa GPU " + GpuThermal.Read());
                     sb.AppendLine("BAT " + x.HasBattery + " " + x.BatteryPercent + " % ac " + x.OnAc + " salud " + x.BatteryHealth + " W " + x.BatteryRateMw);
                 }
             }

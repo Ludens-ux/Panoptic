@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -99,7 +99,7 @@ namespace Panoptic
 
         // ---- Widget
         public static readonly string[] WidgetRingIds = { "cpu", "mem", "disk", "gpu", "temp", "bat" };
-        public static readonly string[] WidgetRingNames = { "CPU", "Memoria", "Disco", "GPU", "Temperatura", "Batería" };
+        public static readonly string[] WidgetRingNames = { "CPU", "Memoria", "Disco", "GPU", "Temperatura CPU", "Batería" };
         public static bool WidgetRing(string id) { return Flag("WidgetRing_" + id, id == "cpu" || id == "mem" || id == "disk"); }
         public static void WidgetRing(string id, bool on) { SetFlag("WidgetRing_" + id, on); }
         /// <summary>Ícono de la bandeja: el del programa (true) o las barras de uso de CPU (false).</summary>

@@ -339,7 +339,7 @@ namespace Panoptic
                         break;
                     case "temp":
                         if (!double.IsNaN(snap.Temperature))
-                            list.Add((g, r) => Ring(g, r, "temp", "Temperatura", (float)Math.Min(100, snap.Temperature), "", ResColors.Temp(th), snap.Temperature.ToString("0") + "°"));
+                            list.Add((g, r) => Ring(g, r, "temp", "Temp. CPU", (float)Math.Min(100, snap.Temperature), "", ResColors.Temp(th), snap.Temperature.ToString("0") + "°"));
                         break;
                     case "bat":
                         if (snap.HasBattery)
