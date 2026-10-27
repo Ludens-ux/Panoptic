@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -79,11 +79,11 @@ namespace Panoptic
                 }, "Ordenar por " + cols[i].Title).Role = AccessibleRole.ColumnHeader;
                 HoverFill(g, hk, r, S(4));
                 var flags = cols[i].Right ? TextFormatFlags.Right | TextFormatFlags.VerticalCenter : TextFormatFlags.Left | TextFormatFlags.VerticalCenter;
-                DrawText(g, cols[i].Title, fonts.Caption, new Rectangle(r.X + S(10), r.Y, r.Width - S(20), r.Height), th.TextSecondary, flags);
+                DrawText(g, cols[i].Title, fonts.Caption, new Rectangle(r.X + S(10), r.Y, r.Width - S(20), r.Height), Mix55, flags);
                 if (sortCol == i)
-                    Glyph(g, asc ? Glyphs.ChevronUp : Glyphs.ChevronDown, fonts.Glyph12, new Rectangle(r.X + r.Width / 2 - S(8), r.Y + S(1), S(16), S(10)), th.TextSecondary);
+                    Glyph(g, asc ? Glyphs.ChevronUp : Glyphs.ChevronDown, fonts.Glyph12, new Rectangle(r.X + r.Width / 2 - S(8), r.Y + S(1), S(16), S(10)), Mix55);
             }
-            LineP(g, ControlStroke, 1, area.X + S(12), hy + S(36), area.Right - S(12), hy + S(36));
+            LineP(g, HeaderLine, 1, area.X + S(12), hy + S(36), area.Right - S(12), hy + S(36));
 
             // Orden
             var c0 = cols[Math.Min(sortCol, cols.Count - 1)];
@@ -91,7 +91,7 @@ namespace Panoptic
             var sorted = asc ? rows.OrderBy(key).ToList() : rows.OrderByDescending(key).ToList();
 
             listView = new Rectangle(area.X, hy + S(37), area.Width, area.Bottom - hy - S(37));
-            int rowH = S(32);
+            int rowH = S(36);
             listContent = sorted.Count * rowH + S(8);
             ClampScroll();
             string sel = Selected(id);
@@ -111,11 +111,7 @@ namespace Panoptic
                     h.Checked = rk == sel;
                     var captured = row;
                     if (menu != null) h.RightClick = pt => { tableSel[id] = rk; Invalidate(); menu(captured, pt); };
-                    if (rk == sel)
-                    {
-                        Fill(g, r, th.Dark ? Color.FromArgb(22, 255, 255, 255) : Color.FromArgb(14, 0, 0, 0), S(4));
-                        Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
-                    }
+                    if (rk == sel) SelectedRow(g, r);
                     else HoverFill(g, hk, r, S(4));
 
                     for (int i = 0; i < cols.Count; i++)
@@ -130,7 +126,7 @@ namespace Panoptic
                             cell = new Rectangle(ir.Right + S(12), y, rects[i].Right - ir.Right - S(22), rowH);
                         }
                         Color? cc = cols[i].Color != null ? cols[i].Color(row) : null;
-                        DrawText(g, cols[i].Text(row), fonts.Body, cell, cc ?? (i == 0 ? th.Text : th.TextSecondary),
+                        DrawText(g, cols[i].Text(row), fonts.Body13, cell, cc ?? (i == 0 ? th.Text : Theme.Mix(th.Bg, th.Dark ? Color.White : Color.Black, 0.8f)),
                             cols[i].Right ? TextFormatFlags.Right | TextFormatFlags.VerticalCenter : TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
                     }
                 }
@@ -146,12 +142,13 @@ namespace Panoptic
         /// <summary>Fila de chips de filtro (con salto de línea si no entran). Devuelve la altura usada.</summary>
         int Chips(Graphics g, int x0, int y, int right, string group, string[] labels, int selected, Action<int> pick)
         {
+            int chipH = group == "log" ? S(30) : S(32);
             int x = x0, rowY = y;
             for (int i = 0; i < labels.Length; i++)
             {
-                int w = MeasureText(labels[i], fonts.Body) + S(28);
-                if (x + w > right && x > x0) { x = x0; rowY += S(40); }
-                var r = new Rectangle(x, rowY, w, S(32));
+                int w = MeasureText(labels[i], fonts.Body13) + S(32);
+                if (x + w > right && x > x0) { x = x0; rowY += S(38); }
+                var r = new Rectangle(x, rowY, w, chipH);
                 string key = "chip-" + group + i;
                 int idx = i;
                 var h = AddHit(key, r, () => { pick(idx); ScrollPos = 0; Invalidate(); }, labels[i]);
@@ -159,19 +156,19 @@ namespace Panoptic
                 if (i == selected) Fill(g, r, IsHover(key) ? th.AccentHover : th.Accent, r.Height / 2f);
                 else
                 {
-                    { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, r.Height / 2f, th.ControlFill); HoverFill(g, key, Rectangle.Round(rr), r.Height / 2f); StrokeRoundP(g, rr, r.Height / 2f, ControlStroke, 1f); }
+                    { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, r.Height / 2f, th.ControlFill); HoverFill(g, key, Rectangle.Round(rr), r.Height / 2f); StrokeRoundP(g, rr, r.Height / 2f, HeaderLine, 1f); }
                 }
-                DrawText(g, labels[i], fonts.Body, r, i == selected ? th.OnAccent : th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-                x += w + S(8);
+                DrawText(g, labels[i], i == selected ? fonts.Body13Strong : fonts.Body13, r, i == selected ? th.OnAccent : th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                x += w + S(6);
             }
-            return rowY + S(40) - y;
+            return rowY + chipH + S(14) - y;
         }
 
         void PageTitle(Graphics g, Rectangle c, string title, string subtitle)
         {
-            DrawText(g, title, fonts.Subtitle, new Rectangle(c.X + S(24), c.Y + S(16), S(360), S(32)), th.Text);
+            DrawText(g, title, fonts.Title, new Rectangle(c.X + S(24), c.Y + S(10), S(420), S(40)), th.Text);
             if (subtitle != null)
-                DrawText(g, subtitle, fonts.Caption, new Rectangle(c.X + S(24), c.Y + S(46), c.Width - S(48), S(18)), th.TextSecondary);
+                DrawText(g, subtitle, fonts.Caption, new Rectangle(c.X + S(24), c.Y + S(48), c.Width - S(48), S(18)), th.TextSecondary);
         }
 
         ContextMenuStrip NewMenu()

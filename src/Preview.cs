@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -139,7 +139,7 @@ namespace Panoptic
                     g.SetClip(shape);
                     using (var b = new SolidBrush(th.Clear)) g.FillRectangle(b, 0, 0, bmp.Width, bar);
                     g.DrawImageUnscaled(client, 0, bar);
-                    using (var icon = TrayIcon.DrawApp(16)) g.DrawImageUnscaled(icon, 14, (bar - 16) / 2);
+                    using (var icon = Eye.DrawApp(16)) g.DrawImageUnscaled(icon, 14, (bar - 16) / 2);
                     using (var f = new Font(Fonts.TextFamily, 12f, GraphicsUnit.Pixel))
                     using (var b = new SolidBrush(th.Text))
                     using (var sf = new StringFormat { LineAlignment = StringAlignment.Center })
@@ -155,6 +155,25 @@ namespace Panoptic
                 }
             }
             return bmp;
+        }
+
+        /// <summary>Hojas con los estados del ojo y los íconos generados, para revisar el diseño.</summary>
+        public static int EyeSheet(string dir)
+        {
+            foreach (int size in new[] { 24, 48 })
+            {
+                using (var b = Eye.StateSheet(size, false, Color.Black)) b.Save(System.IO.Path.Combine(dir, "ojo-" + size + "-notch.png"), ImageFormat.Png);
+                using (var b = Eye.StateSheet(size, false, Theme.Hex(0x202020))) b.Save(System.IO.Path.Combine(dir, "ojo-" + size + "-oscuro.png"), ImageFormat.Png);
+                using (var b = Eye.StateSheet(size, true, Theme.Hex(0xF3F3F3))) b.Save(System.IO.Path.Combine(dir, "ojo-" + size + "-claro.png"), ImageFormat.Png);
+            }
+            foreach (int sz in new[] { 16, 20, 24, 32, 48, 256 })
+                using (var b = Eye.DrawApp(sz)) b.Save(System.IO.Path.Combine(dir, "app-" + sz + ".png"), ImageFormat.Png);
+            foreach (int sz in new[] { 16, 20, 24 })
+            {
+                using (var b = Eye.DrawTray(sz, false)) b.Save(System.IO.Path.Combine(dir, "bandeja-" + sz + "-oscura.png"), ImageFormat.Png);
+                using (var b = Eye.DrawTray(sz, true)) b.Save(System.IO.Path.Combine(dir, "bandeja-" + sz + "-clara.png"), ImageFormat.Png);
+            }
+            return 0;
         }
 
         /// <summary>Diagnóstico: la isla dibujada con GDI+ y con Direct2D, lado a lado, y cuánto tarda cada una.</summary>
@@ -188,23 +207,31 @@ namespace Panoptic
                 Tuple.Create("brillo", false, "Top", "brightness"),
                 Tuple.Create("puntos", false, "Top", "dots"),
                 Tuple.Create("puntos-costado", false, "Left", "dots"),
+                Tuple.Create("notch", false, "Notch", (string)null),
+                Tuple.Create("notch-expandida", true, "Notch", (string)null),
+                Tuple.Create("notch-captura", false, "Notch", "shot"),
+                Tuple.Create("notch-temperatura", false, "Notch", "temp"),
             };
+            bool savedNotch = Settings.IslandNotch;
             try
             {
                 foreach (var shot in shots)
+                {
+                    Settings.IslandNotch = shot.Item3 == "Notch";
                     using (var isl = new IslandForm(host))
                     {
                         isl.CreateControl();
                         var h = isl.Handle;
-                        isl.PreviewState(shot.Item2, shot.Item3, shot.Item4);
+                        isl.PreviewState(shot.Item2, shot.Item3 == "Notch" ? "Top" : shot.Item3, shot.Item4);
                         double gdiMs, gpuMs;
                         using (var a = isl.RenderCanvasForTest(false, out gdiMs)) if (a != null) a.Save(System.IO.Path.Combine(dir, shot.Item1 + "-gdi.png"), ImageFormat.Png);
                         using (var b = isl.RenderCanvasForTest(true, out gpuMs)) if (b != null) b.Save(System.IO.Path.Combine(dir, shot.Item1 + "-d2d.png"), ImageFormat.Png);
                         sb.AppendLine(shot.Item1.PadRight(16) + " GDI+ " + gdiMs.ToString("0.00") + " ms · Direct2D " + gpuMs.ToString("0.00") + " ms" + (isl.UsingGpu ? "" : " (Direct2D NO disponible: usó GDI+)"));
                     }
+                }
             }
             catch (Exception ex) { sb.AppendLine("ERROR " + ex); }
-            finally { Settings.IslandPosition = saved; }
+            finally { Settings.IslandPosition = saved; Settings.IslandNotch = savedNotch; }
             System.IO.File.WriteAllText(System.IO.Path.Combine(dir, "tiempos.txt"), sb.ToString());
             return 0;
         }
@@ -354,7 +381,7 @@ namespace Panoptic
             var th = Theme.Load();
             using (var icon = TrayIcon.Draw(23, host.Snap.CpuHistory, th, 32)) icon.Save(System.IO.Path.Combine(dir, "tray.png"), ImageFormat.Png);
             foreach (int sz in new[] { 16, 20, 24, 32 })
-                using (var icon = TrayIcon.DrawApp(sz)) icon.Save(System.IO.Path.Combine(dir, "tray-app-" + sz + ".png"), ImageFormat.Png);
+                using (var icon = Eye.DrawTray(sz, false)) icon.Save(System.IO.Path.Combine(dir, "tray-app-" + sz + ".png"), ImageFormat.Png);
             return 0;
         }
     }

@@ -57,7 +57,13 @@ namespace Panoptic
             MinimumSize = new Size(760, 520);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
             refresh.Interval = 1000;
-            refresh.Tick += (o, e) => { if (WindowState != FormWindowState.Minimized) Invalidate(); };
+            refresh.Tick += (o, e) =>
+            {
+                if (WindowState == FormWindowState.Minimized) return;
+                Eye.Shared.ObserveIfStale(host.Latest);
+                if (Eye.Shared.Moving(Clock.Ms)) RequestMotion();
+                Invalidate();
+            };
 
             search.BorderStyle = BorderStyle.None;
             search.Visible = false;
@@ -105,11 +111,16 @@ namespace Panoptic
             // Con Mica la barra de título queda con el fondo del sistema; sin transparencia se iguala al fondo.
             int v = th.Glass ? unchecked((int)0xFFFFFFFF) /* DWMWA_COLOR_DEFAULT */ : Native.ColorRef(th.Bg);
             Native.DwmSetWindowAttribute(Handle, Native.DWMWA_CAPTION_COLOR, ref v, 4);
-            search.BackColor = th.Dark ? Theme.Hex(0x2D2D2D) : Theme.Hex(0xFFFFFF);
+            int border = Native.ColorRef(Theme.Mix(th.Bg, th.Dark ? Color.White : Color.Black, 0.09f));
+            Native.DwmSetWindowAttribute(Handle, Native.DWMWA_BORDER_COLOR, ref border, 4);
+            search.BackColor = SearchFill;
             search.ForeColor = th.Text;
         }
 
-        protected override int Backdrop { get { return Native.DWMSBT_MICA; } }
+        protected override int Backdrop { get { return Native.DWMSBT_TRANSIENTWINDOW; } }
+
+        /// <summary>Fondo opaco del cuadro de búsqueda (el TextBox de Windows no admite transparencia).</summary>
+        Color SearchFill { get { return Theme.Mix(th.Bg, th.Dark ? Color.White : Color.Black, 0.05f); } }
 
         /// <summary>La ventana principal se dibuja con la placa de video (Direct2D); si no se puede, con GDI+.</summary>
         protected override bool UseGpu { get { return true; } }
@@ -154,7 +165,6 @@ namespace Panoptic
         {
             if (page == p) return;
             page = p;
-            SetSpring("page-enter", 0f);
             string t;
             search.Text = searchText.TryGetValue(p, out t) ? t : "";
             Invalidate();
@@ -168,28 +178,9 @@ namespace Panoptic
             // Cada zona se pinta una sola vez y con copia directa (sin mezclar transparencias): limpiar toda la
             // ventana y después volver a pintar la capa de contenido costaba más de 4 ms por cuadro.
             // El panel lateral se abre y se cierra con un resorte.
-            int navW = (int)Math.Round(Spring("nav-w", navExpanded ? S(220) : S(52), 0.34f, 0.9f));
-            var content = new Rectangle(navW, 0, ClientSize.Width - navW, ClientSize.Height);
-            // Fondo: cada zona se pinta una sola vez con un relleno rápido (antes, limpiar y repintar costaba más de 4 ms por cuadro).
-            FastFill(g, new Rectangle(0, 0, navW, ClientSize.Height), th.Clear);
-            FastFill(g, content, th.Layer);
-            // Esquina superior izquierda redondeada de la capa (área de contenido de Windows 11).
-            int rad = S(8);
-            FastFill(g, new Rectangle(content.X, content.Y, rad, rad), th.Clear);
-            // El cuarto de círculo de la esquina como polígono (sirve igual con GDI+ y con Direct2D).
-            var corner = new PointF[11];
-            corner[0] = new PointF(content.X + rad, content.Y + rad);
-            for (int i = 0; i <= 9; i++)
-            {
-                double a = Math.PI + Math.PI / 2 * i / 9;
-                corner[i + 1] = new PointF(content.X + rad + rad * (float)Math.Cos(a), content.Y + rad + rad * (float)Math.Sin(a));
-            }
-            AreaP(g, corner, th.Layer);
-            var edge = new PointF[10];
-            for (int i = 0; i < 10; i++) edge[i] = new PointF(corner[i + 1].X + .5f, corner[i + 1].Y + .5f);
-            LinesP(g, edge, th.LayerStroke, 1);
-            LineP(g, th.LayerStroke, 1, content.X + rad, content.Y + .5f, content.Right, content.Y + .5f);
-            LineP(g, th.LayerStroke, 1, content.X + .5f, content.Y + rad, content.X + .5f, content.Bottom);
+            int navW = (int)Math.Round(Spring("nav-w", navExpanded ? S(208) : S(52), 0.34f, 0.9f));
+            // Una sola superficie casi negra para el riel y el contenido.
+            FastFill(g, new Rectangle(0, 0, ClientSize.Width, ClientSize.Height), th.Clear);
             Stat("1 fondo", psw);
             PaintNav(g, navW);
             Stat("2 nav", psw);
@@ -199,15 +190,17 @@ namespace Panoptic
             if (host.Helper != null) host.Helper.WantFiles = page == "files";
             search.Visible = page == "procs" || page == "net" || page == "files" || page == "usb" || page == "power" || page == "startup" || page == "services" || page == "log";
             var snap = host.Latest;
+            var area = new Rectangle(navW, 0, ClientSize.Width - navW, ClientSize.Height);
             if (snap == null)
             {
-                DrawText(g, "Midiendo…", fonts.Body, content, th.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+                DrawText(g, "Midiendo…", fonts.Body, area, th.TextSecondary, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
                 return;
             }
-            // Entrada de página: sube unos píxeles y aparece con un fundido (se puede interrumpir con otro clic).
-            float enter = Spring("page-enter", 1f, 0.42f, 0.88f);
-            var pageState = ClipP(g, content);
-            if (enter < 0.999f) TranslateP(g, pageState, 0, (float)Math.Round((1 - enter) * S(28)));
+            // Cabecera "isla": la misma píldora que la isla compacta, siempre visible arriba del contenido.
+            IslandHeader(g, area, snap);
+            // La página empieza debajo de la cabecera (el título queda 14 px más abajo).
+            var content = new Rectangle(area.X, S(44), area.Width - S(4), area.Height - S(44));
+            var pageState = ClipP(g, new Rectangle(area.X, S(50), area.Width, area.Height - S(50)));
             if (page == "perf") PaintPerformance(g, content, snap);
             else if (page == "procs") PaintProcesses(g, content, snap);
             else if (page == "hist") PaintHistory(g, content);
@@ -220,12 +213,73 @@ namespace Panoptic
             else if (page == "settings") PaintSettings(g, content);
             else PaintLog(g, content);
             UnclipP(g, pageState);
-            if (enter < 0.999f)
-            {
-                int a = (int)(255 * Math.Max(0, 1 - enter * 1.6f));
-                if (a > 0) FillRoundP(g, new Rectangle(content.X + 1, content.Y + 1, content.Width - 1, content.Height - 1), 0, Color.FromArgb(a, th.Layer.R, th.Layer.G, th.Layer.B));
-            }
             Stat("4 pagina", psw);
+        }
+
+        // ------------------------------------------------------------------ cabecera "isla"
+
+        Rectangle headerEye;
+        static readonly Theme PillTokens = new Theme { Dark = true };
+
+        /// <summary>
+        /// Píldora negra centrada arriba del contenido: el ojo vivo, tres mini anillos (CPU, memoria y temperatura) y
+        /// la bajada de red. Clic en un anillo: Rendimiento con esa métrica.
+        /// </summary>
+        void IslandHeader(Graphics g, Rectangle area, Snapshot snap)
+        {
+            // La píldora es negra también con el tema claro: los anillos usan los colores del tema oscuro.
+            var cells = new List<Tuple<string, string, float, string, Color>>();
+            cells.Add(Tuple.Create("cpu", "CPU", snap.Cpu, Pct(snap.Cpu), ResColors.Cpu(PillTokens)));
+            cells.Add(Tuple.Create("mem", "Memoria", snap.MemPercent, snap.MemPercent.ToString("0") + "%", ResColors.Memory(PillTokens)));
+            if (!double.IsNaN(snap.Temperature))
+                cells.Add(Tuple.Create("temp", "Temperatura", (float)Math.Min(100, snap.Temperature), snap.Temperature.ToString("0") + "°", ResColors.Temp(PillTokens)));
+            else if (snap.GpuAvailable)
+                cells.Add(Tuple.Create("gpu", "GPU", snap.Gpu, Pct(snap.Gpu), ResColors.Gpu(PillTokens)));
+            var net = snap.Nets.OrderByDescending(n => n.RecvBps + n.SendBps).FirstOrDefault();
+            string netText = "↓ " + Format.Bits(net != null ? net.RecvBps : 0);
+            bool narrow = ClientSize.Width < S(640);
+            var valFont = fonts.Body13Strong;
+            int valW = MeasureText("100%", valFont);
+            int cellW = S(16) + S(6) + valW;
+            int netW = narrow ? 0 : S(1) + S(14) + MeasureText("↓ 888,8 Mbps", fonts.Caption);
+            int w = S(12) + S(24) + cells.Count * (S(14) + cellW) + netW + S(16);
+            var pill = new Rectangle(area.X + (area.Width - w) / 2, S(4), w, S(38));
+            var pf = new RectangleF(pill.X + .5f, pill.Y + .5f, pill.Width - 1, pill.Height - 1);
+            FillRoundP(g, pf, S(19), Color.Black);
+            StrokeRoundP(g, pf, S(19), Color.FromArgb(23, 255, 255, 255), 1f);
+
+            int x = pill.X + S(12), cy = pill.Y + pill.Height / 2;
+            headerEye = new Rectangle(x, cy - S(12), S(24), S(24));
+            Eye.Shared.Draw(g, d2d, headerEye, false);
+            var eh = AddHit("hdr-eye", headerEye, () => { Eye.Shared.Blink(); RequestMotion(); }, "Ojo de Panoptic");
+            eh.Focusable = false;
+            x += S(24);
+            // En la píldora negra el texto es siempre claro (también con el tema claro).
+            foreach (var c in cells)
+            {
+                x += S(14);
+                var cr = new Rectangle(x, pill.Y, cellW, pill.Height);
+                string id = c.Item1;
+                var h = AddHit("hdr-" + id, cr, () => ShowPage(id), c.Item2 + " " + c.Item4);
+                h.Tip = c.Item2;
+                float v = Spring("hdr-v-" + id, c.Item3, 0.35f);
+                DrawRing(g, new RectangleF(x, cy - S(8), S(16), S(16)), v, c.Item5, 2.8f * s);
+                DrawText(g, c.Item4, valFont, new Rectangle(x + S(22), pill.Y, valW + S(4), pill.Height), Color.White);
+                x += cellW;
+            }
+            if (!narrow)
+            {
+                x += S(14);
+                FillRoundP(g, new RectangleF(x, cy - S(8), S(1), S(16)), 0, Color.FromArgb(31, 255, 255, 255));
+                x += S(1) + S(14);
+                DrawText(g, netText, fonts.Caption, new Rectangle(x, pill.Y, pill.Right - x - S(8), pill.Height), Color.FromArgb(0x9D, 0x9D, 0x9D));
+            }
+        }
+
+        protected override bool MotionExtra(double now)
+        {
+            Eye.Shared.Step(now);
+            return Visible && Eye.Shared.Moving(now);
         }
 
         static void Stat(string k, System.Diagnostics.Stopwatch sw)
@@ -244,7 +298,7 @@ namespace Panoptic
         {
             // Destino de la píldora: se calcula antes de dibujar (los ítems van en este orden; Configuración, abajo).
             int idx = Array.IndexOf(NavKeys, page);
-            int selY = page == "settings" ? ClientSize.Height - S(48) : idx >= 0 ? S(48) + idx * S(44) : -1;
+            int selY = page == "settings" ? ClientSize.Height - S(48) : idx >= 0 ? S(56) + idx * S(42) : -1;
             if (selY >= 0 && navSelY != selY)
             {
                 if (navSelY < 0) SetSpring("nav-sel", selY);
@@ -253,17 +307,14 @@ namespace Panoptic
             // Píldora de selección: se desliza hasta el ítem elegido y la marca de acento se estira mientras viaja.
             if (navSelY >= 0)
             {
-                float ay = Spring("nav-sel", navSelY, 0.36f, 0.82f);
-                var pill = new Rectangle(S(4), (int)Math.Round(ay), navW - S(8), S(40));
-                Fill(g, pill, th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0), S(4));
-                float stretch = Math.Min(S(18), Math.Abs(ay - navSelY) * 0.35f);
-                int mh = (int)(S(16) + stretch);
-                Fill(g, new Rectangle(pill.X, pill.Y + pill.Height / 2 - mh / 2, S(3), mh), th.Accent, S(1.5f));
+                float ay = Spring("nav-sel", navSelY, 0.12f, 1f);
+                var pill = new Rectangle(S(8), (int)Math.Round(ay), navW - S(16), S(40));
+                Fill(g, pill, th.Dark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0), S(8));
             }
-            int y = S(4);
-            SubtleButton(g, "nav-toggle", new Rectangle(S(6), y, S(40), S(36)), Glyphs.Menu, null,
+            int y = S(8);
+            SubtleButton(g, "nav-toggle", new Rectangle(S(8), y, S(36), S(36)), Glyphs.Menu, null,
                 navExpanded ? "Contraer navegación" : "Expandir navegación", () => { navChoice = !navExpanded; Invalidate(); });
-            y += S(44);
+            y += S(48);
             NavItem(g, "perf", Glyphs.Performance, "Rendimiento", navW, ref y);
             NavItem(g, "procs", Glyphs.Processes, "Procesos", navW, ref y);
             NavItem(g, "hist", Glyphs.History, "Historial", navW, ref y);
@@ -280,78 +331,121 @@ namespace Panoptic
 
         void NavItem(Graphics g, string key, string glyph, string label, int navW, ref int y)
         {
-            var r = new Rectangle(S(4), y, navW - S(8), S(40));
+            var r = new Rectangle(S(8), y, navW - S(16), S(40));
             bool sel = page == key;
             var h = AddHit("nav-" + key, r, () => Navigate(key), label);
             h.Role = AccessibleRole.PageTab;
             h.Checked = sel;
             if (!navExpanded) h.Tip = label;
-            HoverFill(g, h.Key, r, S(4));
+            if (!sel) HoverFill(g, h.Key, r, S(8));
             float sc = PressScale(h.Key, 0.97f);
             var st = BeginScale(g, r, sc);
-            Glyph(g, glyph, fonts.Glyph16, new Rectangle(r.X + S(12), r.Y, S(20), r.Height), th.Text);
+            // Cuadrado de 22 × 22 con el glifo: acento al 20 % si está elegido; si no, blanco al 5 %.
+            var sq = new Rectangle(r.X + S(7), r.Y + S(9), S(22), S(22));
+            Color ink = th.Dark ? Color.White : Color.Black;
+            Fill(g, sq, sel ? Color.FromArgb(51, th.Accent) : Color.FromArgb(13, ink), S(4));
+            Glyph(g, glyph, fonts.Glyph12, sq, sel ? th.Accent : Theme.Mix(th.Bg, ink, 0.7f));
             // Mientras el panel se abre o se cierra, el texto aparece recortado por el ancho.
             if (navW >= S(100))
             {
-                var tr = new Rectangle(r.X + S(44), r.Y, r.Width - S(48), r.Height);
+                var tr = new Rectangle(sq.Right + S(12), r.Y, r.Right - sq.Right - S(16), r.Height);
                 var cs = ClipP(g, tr);
                 DrawText(g, label, fonts.Body, new Rectangle(tr.X, tr.Y, Math.Max(tr.Width, S(160)), tr.Height), th.Text);
                 UnclipP(g, cs);
             }
             EndScale(g, st, sc);
-            y += S(44);
+            y += S(42);
         }
 
         // ------------------------------------------------------------------ Rendimiento
 
+        sealed class RingCell
+        {
+            public string Id, Label, Value, Sub;
+            public float Ring;
+            public Color Color;
+        }
+
+        Color detailColor;
+        string detailValue;
+        int detailTop, detailBottom, detailH;
+
+        /// <summary>
+        /// Rendimiento: una grilla de anillos (la de la isla expandida), la tarjeta de red y debajo el detalle de la
+        /// métrica elegida. La página se desplaza si no entra.
+        /// </summary>
         void PaintPerformance(Graphics g, Rectangle c, Snapshot snap)
         {
             int pad = S(24);
-            DrawText(g, "Rendimiento", fonts.Subtitle, new Rectangle(c.X + pad, c.Y + S(16), S(300), S(32)), th.Text);
+            PageTitle(g, c, "Rendimiento", null);
             int top = c.Y + S(64);
 
-            // Lista de recursos
-            int listW = S(236);
-            var items = new List<Tuple<string, string, string, float[], float, Color>>();
-            items.Add(Tuple.Create("cpu", "CPU", Format.Percent(snap.Cpu) + (snap.CpuMhz > 0 ? "  " + Format.Ghz(snap.CpuMhz) : ""), snap.CpuHistory, 100f, ResColors.Cpu(th)));
-            items.Add(Tuple.Create("mem", "Memoria", Format.Bytes(snap.MemUsed) + " / " + Format.Bytes(snap.MemTotal) + " (" + snap.MemPercent.ToString("0") + " %)", snap.MemHistory, 100f, ResColors.Memory(th)));
+            // Fila principal: CPU, memoria, disco, GPU, temperatura y batería (las que existan en el equipo).
+            var main = new List<RingCell>();
+            main.Add(new RingCell { Id = "cpu", Label = "CPU", Ring = snap.Cpu, Value = Pct(snap.Cpu),
+                Sub = snap.CpuMhz > 0 ? Format.Ghz(snap.CpuMhz) : Short(snap.CpuName), Color = ResColors.Cpu(th) });
+            main.Add(new RingCell { Id = "mem", Label = "Memoria", Ring = snap.MemPercent, Value = snap.MemPercent.ToString("0") + "%",
+                Sub = Format.Bytes(snap.MemUsed) + " / " + Format.Bytes(snap.MemTotal), Color = ResColors.Memory(th) });
+            var disks = snap.Disks.OrderBy(d => d.Number).ToList();
+            if (disks.Count > 0) main.Add(DiskCell(disks[0]));
             if (snap.GpuAvailable)
-                items.Add(Tuple.Create("gpu", "GPU", Format.Percent(snap.Gpu) + (double.IsNaN(snap.GpuTemperature) ? "" : "  " + snap.GpuTemperature.ToString("0") + " °C") + "  " + Short(snap.GpuName), snap.GpuHistory, 100f, ResColors.Gpu(th)));
+                main.Add(new RingCell { Id = "gpu", Label = "GPU", Ring = snap.Gpu, Value = Pct(snap.Gpu),
+                    Sub = double.IsNaN(snap.GpuTemperature) ? Format.Bytes(snap.GpuDedicated) + " en uso" : snap.GpuTemperature.ToString("0") + " °C · " + Format.Bytes(snap.GpuDedicated),
+                    Color = ResColors.Gpu(th) });
             if (!double.IsNaN(snap.Temperature))
-                items.Add(Tuple.Create("temp", "Temperatura CPU", snap.Temperature.ToString("0") + " °C", snap.TempHistory, 110f, ResColors.Temp(th)));
+                main.Add(new RingCell { Id = "temp", Label = "Temperatura", Ring = (float)Math.Min(100, snap.Temperature), Value = snap.Temperature.ToString("0") + "°",
+                    Sub = snap.Temperature >= Settings.TempThreshold ? "Alta" : "Normal", Color = ResColors.Temp(th) });
             if (snap.HasBattery)
-                items.Add(Tuple.Create("bat", "Batería", snap.BatteryPercent.ToString("0") + " %" + (snap.OnAc ? (snap.Charging ? "  cargando" : "  enchufada") : "  con batería"),
-                    snap.BatteryHistory, 100f, ResColors.Battery(th)));
-            foreach (var d in snap.Disks)
-                items.Add(Tuple.Create("disk" + d.Number, d.Title, (string.IsNullOrEmpty(d.Kind) ? "" : d.Kind + "  ") + Format.Percent(d.Active), d.ActivityHistory, 100f, ResColors.Disk(th)));
+                main.Add(new RingCell { Id = "bat", Label = "Batería", Ring = snap.BatteryPercent, Value = snap.BatteryPercent.ToString("0") + "%",
+                    Sub = snap.OnAc ? (snap.Charging ? "Cargando" : "Enchufada") : "Con batería", Color = ResColors.Battery(th) });
+            // Segunda fila: los demás discos y un anillo por adaptador de red.
+            var extra = new List<RingCell>();
+            for (int i = 1; i < disks.Count; i++) extra.Add(DiskCell(disks[i]));
             foreach (var n in snap.Nets)
             {
-                var h = Sum(n.SendHistory, n.RecvHistory);
-                items.Add(Tuple.Create("net" + n.Id, n.Kind, "E: " + Format.Bits(n.SendBps) + "  R: " + Format.Bits(n.RecvBps), h, Math.Max(1, h.Max()) * 1.2f, ResColors.Net(th)));
+                double use = n.LinkSpeed > 0 ? (n.RecvBps + n.SendBps) * 8 * 100 / n.LinkSpeed : 0;
+                extra.Add(new RingCell { Id = "net" + n.Id, Label = n.Kind, Ring = (float)Math.Min(100, use), Value = use >= 1 ? use.ToString("0") + "%" : "0%",
+                    Sub = "↓ " + Format.Bits(n.RecvBps) + " · ↑ " + Format.Bits(n.SendBps), Color = ResColors.Net(th) });
             }
-            if (!items.Any(i => i.Item1 == resource)) resource = "cpu";
+            var all = main.Concat(extra).ToList();
+            if (!all.Any(x => x.Id == resource)) resource = "cpu";
 
-            int iy = top;
-            foreach (var it in items)
+            listView = new Rectangle(c.X, top, c.Width, c.Bottom - top);
+            int W = c.Width - 2 * pad, gap = S(4);
+            int cols = Math.Max(1, main.Count);
+            int cellW = (W - gap * (cols - 1)) / cols, cellH = S(124);
+            int rows = 1 + (extra.Count + cols - 1) / cols;
+            var net = snap.Nets.FirstOrDefault();
+            int netH = net != null ? S(56) + S(14) : 0;
+            if (detailH == 0) detailH = S(440);
+            listContent = rows * (cellH + gap) - gap + S(14) + netH + detailH + S(16);
+            ClampScroll();
+            var state = ClipP(g, listView);
+            int y = top - ScrollPos;
+
+            for (int i = 0; i < all.Count; i++)
             {
-                var r = new Rectangle(c.X + S(12), iy, listW, S(60));
-                bool sel = it.Item1 == resource;
-                string key = "res-" + it.Item1;
-                var hh = AddHit(key, r, () => { resource = it.Item1; Invalidate(); }, it.Item2 + ", " + it.Item3);
-                hh.Role = AccessibleRole.ListItem; hh.Checked = sel;
-                if (sel) Fill(g, r, th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(10, 0, 0, 0), S(4));
-                HoverFill(g, key, r, S(4));
-                if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
-                var gr = new Rectangle(r.X + S(12), r.Y + S(10), S(64), S(40));
-                FillRoundP(g, gr, 0, th.GraphBg);
-                Graph(g, gr, it.Item4, it.Item5, it.Item6, false, true);
-                DrawText(g, it.Item2, fonts.Body, new Rectangle(gr.Right + S(12), r.Y + S(11), r.Width - S(96), S(20)), th.Text);
-                DrawText(g, it.Item3, fonts.Caption, new Rectangle(gr.Right + S(12), r.Y + S(31), r.Width - S(96), S(18)), th.TextSecondary);
-                iy += S(62);
+                int col = i < main.Count ? i : (i - main.Count) % cols, row = i < main.Count ? 0 : 1 + (i - main.Count) / cols;
+                var r = new Rectangle(c.X + pad + col * (cellW + gap), y + row * (cellH + gap), cellW, cellH);
+                RingTile(g, r, all[i]);
+            }
+            y += rows * (cellH + gap) - gap + S(14);
+
+            if (net != null)
+            {
+                NetCard(g, new Rectangle(c.X + pad, y, W, S(56)), net);
+                y += S(56) + S(14);
             }
 
-            // Detalle
-            var dr = new Rectangle(c.X + listW + S(36), top - S(4), c.Right - (c.X + listW + S(36)) - pad, c.Bottom - top - S(16));
+            // Detalle de la métrica elegida en una tarjeta (su alto se mide en el cuadro anterior).
+            var sel = all.First(x => x.Id == resource);
+            detailColor = sel.Color;
+            detailValue = sel.Value;
+            var card = new Rectangle(c.X + pad, y, W, detailH);
+            Card(g, card);
+            var dr = new Rectangle(card.X + S(18), card.Y + S(16), card.Width - S(36), card.Height - S(32));
+            detailTop = card.Y;
+            detailBottom = 0;
             if (resource == "cpu") DetailCpu(g, dr, snap);
             else if (resource == "mem") DetailMem(g, dr, snap);
             else if (resource == "gpu") DetailGpu(g, dr, snap);
@@ -359,6 +453,80 @@ namespace Panoptic
             else if (resource == "bat") DetailBattery(g, dr, snap);
             else if (resource.StartsWith("disk")) DetailDisk(g, dr, snap.Disks.FirstOrDefault(d => "disk" + d.Number == resource));
             else DetailNet(g, dr, snap.Nets.FirstOrDefault(n => "net" + n.Id == resource));
+            UnclipP(g, state);
+            int want = detailBottom > 0 ? detailBottom - detailTop + S(16) : detailH;
+            if (Math.Abs(want - detailH) > 1) { detailH = want; Invalidate(); }
+            DrawScrollbar(g);
+        }
+
+        RingCell DiskCell(DiskMetric d)
+        {
+            return new RingCell { Id = "disk" + d.Number, Label = d.Title, Ring = d.Active, Value = Pct(d.Active),
+                Sub = "L " + Format.Rate(d.ReadBps) + " · E " + Format.Rate(d.WriteBps), Color = ResColors.Disk(th) };
+        }
+
+        /// <summary>
+        /// Celda de la grilla: anillo de 64 px con el valor adentro, la etiqueta y el subtítulo en el color de la métrica
+        /// (una línea, con elipsis). Elegida: fondo del color al 12 % y borde al 33 %.
+        /// </summary>
+        void RingTile(Graphics g, Rectangle r, RingCell cell)
+        {
+            string key = "res-" + cell.Id;
+            bool sel = cell.Id == resource;
+            var vis = Rectangle.Intersect(r, listView);
+            if (vis.Height <= 0) return;
+            var h = AddHit(key, vis, () => { resource = cell.Id; Invalidate(); }, cell.Label + ", " + cell.Value + ", " + cell.Sub);
+            h.Role = AccessibleRole.ListItem; h.Checked = sel;
+            var rf = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1);
+            if (sel)
+            {
+                FillRoundP(g, rf, S(8), Color.FromArgb(31, cell.Color));
+                StrokeRoundP(g, rf, S(8), Color.FromArgb(84, cell.Color), 1f);
+            }
+            else HoverFill(g, key, r, S(8));
+            float v = Spring("ring-" + cell.Id, cell.Ring, 0.35f);
+            var ring = new RectangleF(r.X + (r.Width - S(64)) / 2f, r.Y + S(10), S(64), S(64));
+            DrawRing(g, ring, v, cell.Color, 3.5f * s);
+            DrawText(g, cell.Value, fonts.Display16, Rectangle.Round(ring), th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            var center = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter;
+            DrawText(g, cell.Label, fonts.Caption, new Rectangle(r.X + S(6), r.Y + S(80), r.Width - S(12), S(16)), th.Text, center);
+            DrawText(g, cell.Sub, fonts.Small, new Rectangle(r.X + S(6), r.Y + S(97), r.Width - S(12), S(15)), cell.Color, center);
+        }
+
+        /// <summary>Tarjeta ancha de red (como en la isla expandida): adaptador, gráfico de 40 s, bajada y subida.</summary>
+        void NetCard(Graphics g, Rectangle r, NetMetric n)
+        {
+            string key = "res-net" + n.Id;
+            var vis = Rectangle.Intersect(r, listView);
+            if (vis.Height <= 0) return;
+            var h = AddHit(key, vis, () => { resource = "net" + n.Id; Invalidate(); }, n.Kind + ": bajada " + Format.Bits(n.RecvBps) + ", subida " + Format.Bits(n.SendBps));
+            h.Role = AccessibleRole.ListItem; h.Checked = resource == "net" + n.Id;
+            Color c = ResColors.Net(th);
+            Card(g, r);
+            HoverFill(g, key, r, S(8));
+            string name = n.Kind == "Wi-Fi" && !string.IsNullOrEmpty(n.Ssid) ? "Wi-Fi" : n.Kind;
+            int nameW = Math.Max(S(70), MeasureText(name, fonts.Body13Strong) + S(16));
+            DrawText(g, name, fonts.Body13Strong, new Rectangle(r.X + S(16), r.Y, nameW, r.Height), c);
+            string down = "↓ " + Format.Bits(n.RecvBps), up = "↑ " + Format.Bits(n.SendBps);
+            int upW = MeasureText(up, fonts.Caption), downW = MeasureText(down, fonts.Body13Strong);
+            DrawText(g, up, fonts.Caption, new Rectangle(r.Right - S(16) - upW, r.Y, upW + S(2), r.Height), th.TextSecondary);
+            DrawText(g, down, fonts.Body13Strong, new Rectangle(r.Right - S(16) - upW - S(12) - downW, r.Y, downW + S(2), r.Height), th.Text);
+            var gr = new Rectangle(r.X + S(16) + nameW, r.Y + S(12), r.Width - S(32) - nameW - upW - downW - S(28), r.Height - S(24));
+            if (gr.Width > S(40))
+            {
+                var hist = Last(Sum(n.SendHistory, n.RecvHistory), 40);
+                Graph(g, gr, hist, Math.Max(1, hist.Max()) * 1.2f, c, false, false);
+            }
+        }
+
+        static string Pct(float v) { return v.ToString("0") + "%"; }
+
+        static float[] Last(float[] a, int n)
+        {
+            if (a.Length <= n) return a;
+            var r = new float[n];
+            Array.Copy(a, a.Length - n, r, 0, n);
+            return r;
         }
 
         static float[] Sum(float[] a, float[] b)
@@ -368,57 +536,59 @@ namespace Panoptic
             return r;
         }
 
+        /// <summary>Encabezado del detalle: nombre en el color de la métrica, subtítulo y el valor actual a la derecha.</summary>
         Rectangle DetailHeader(Graphics g, Rectangle r, string title, string right)
         {
-            DrawText(g, title, fonts.Title, new Rectangle(r.X, r.Y, r.Width / 2, S(40)), th.Text);
-            DrawText(g, right, fonts.Body, new Rectangle(r.X + r.Width / 3, r.Y + S(8), r.Width * 2 / 3, S(28)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-            return new Rectangle(r.X, r.Y + S(48), r.Width, r.Height - S(48));
+            int vw = MeasureText(detailValue ?? "", fonts.Display22) + S(4);
+            DrawText(g, title, fonts.Subtitle, new Rectangle(r.X, r.Y, r.Width - vw - S(12), S(28)), detailColor);
+            DrawText(g, right ?? "", fonts.Body13, new Rectangle(r.X, r.Y + S(28), r.Width - vw - S(12), S(18)), th.TextSecondary);
+            DrawText(g, detailValue ?? "", fonts.Display22, new Rectangle(r.Right - vw, r.Y, vw, S(32)), th.Text, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            return new Rectangle(r.X, r.Y + S(58), r.Width, r.Height - S(58));
         }
+
+        /// <summary>Alto del gráfico principal del detalle: 150 px.</summary>
+        int GraphH(Rectangle b) { return S(150); }
 
         int BigGraph(Graphics g, Rectangle r, int y, int height, string label, string max, float[] values, float vmax, Color c, float[] second)
         {
-            DrawText(g, label, fonts.Caption, new Rectangle(r.X, y, r.Width / 2, S(18)), th.TextSecondary);
-            DrawText(g, max, fonts.Caption, new Rectangle(r.X + r.Width / 2, y, r.Width / 2, S(18)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-            var gr = new Rectangle(r.X, y + S(20), r.Width, height);
-            FillRoundP(g, gr, 0, th.GraphBg);
-            Graph(g, gr, values, vmax, c, true, true);
+            DrawText(g, label, fonts.Small, new Rectangle(r.X, y, r.Width * 2 / 3, S(16)), th.TextTertiary);
+            DrawText(g, max, fonts.Small, new Rectangle(r.X + r.Width / 2, y, r.Width / 2, S(16)), th.TextTertiary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            var gr = new Rectangle(r.X, y + S(18), r.Width, height);
+            FillRoundP(g, gr, S(4), th.GraphBg);
+            Graph(g, gr, values, vmax, c, true, false);
             if (second != null)
             {
                 // Segunda serie (enviar) como línea punteada sobre la primera.
                 var pts = new PointF[second.Length];
                 for (int i = 0; i < second.Length; i++)
-                    pts[i] = new PointF(gr.X + 1 + (gr.Width - 2f) * i / (second.Length - 1), gr.Bottom - 1 - (gr.Height - 2f) * Math.Min(vmax, second[i]) / vmax);
+                    pts[i] = new PointF(gr.X + (gr.Width - 1f) * i / (second.Length - 1), gr.Bottom - 1 - (gr.Height - 2f) * Math.Min(vmax, second[i]) / vmax);
                 LinesP(g, pts, c, Math.Max(1.2f, 1.5f * s), 1);
             }
-            DrawText(g, "60 segundos", fonts.Caption, new Rectangle(r.X, gr.Bottom + S(2), r.Width / 2, S(18)), th.TextSecondary);
-            DrawText(g, "0", fonts.Caption, new Rectangle(r.X + r.Width / 2, gr.Bottom + S(2), r.Width / 2, S(18)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-            return gr.Bottom + S(28);
+            DrawText(g, "60 segundos", fonts.Small, new Rectangle(r.X, gr.Bottom + S(2), r.Width / 2, S(16)), th.TextTertiary);
+            DrawText(g, "0", fonts.Small, new Rectangle(r.X + r.Width / 2, gr.Bottom + S(2), r.Width / 2, S(16)), th.TextTertiary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            return gr.Bottom + S(30);
         }
 
+        /// <summary>Estadísticas en una grilla autoajustable (mínimo 130 px por celda): etiqueta de 11 px y valor de 18 px.</summary>
         void Stats(Graphics g, Rectangle r, int y, IList<string[]> big, IList<string[]> small)
         {
-            int colW = S(132);
-            int x = r.X, row = y;
-            foreach (var st in big)
+            var items = big.Concat(small).ToList();
+            int per = Math.Max(1, r.Width / S(130));
+            int colW = r.Width / per, rowH = S(48);
+            for (int i = 0; i < items.Count; i++)
             {
-                if (x + colW > r.X + r.Width * 0.55 && x > r.X) { x = r.X; row += S(56); }
-                DrawText(g, st[0], fonts.Caption, new Rectangle(x, row, colW - S(8), S(18)), th.TextSecondary);
-                DrawText(g, st[1], fonts.Subtitle, new Rectangle(x, row + S(18), colW - S(8), S(30)), th.Text);
-                x += colW;
+                int x = r.X + (i % per) * colW, yy = y + (i / per) * rowH;
+                string label = items[i][0].TrimEnd(':');
+                DrawText(g, label, fonts.Small, new Rectangle(x, yy, colW - S(10), S(16)), Mix55);
+                DrawText(g, items[i][1], fonts.Display18, new Rectangle(x, yy + S(16), colW - S(10), S(26)), th.Text);
             }
-            int sx = r.X + (int)(r.Width * 0.58), sy = y;
-            foreach (var st in small)
-            {
-                DrawText(g, st[0], fonts.Caption, new Rectangle(sx, sy, S(150), S(20)), th.TextSecondary);
-                DrawText(g, st[1], fonts.Caption, new Rectangle(sx + S(150), sy, r.Right - sx - S(150), S(20)), th.Text);
-                sy += S(22);
-            }
+            detailBottom = y + ((items.Count + per - 1) / per) * rowH;
         }
 
         void DetailCpu(Graphics g, Rectangle r, Snapshot snap)
         {
             var b = DetailHeader(g, r, "CPU", snap.CpuName);
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             int y = BigGraph(g, b, b.Y, gh, "% de uso", "100 %", snap.CpuHistory, 100, ResColors.Cpu(th), null);
             Stats(g, b, y, new[]
             {
@@ -439,7 +609,7 @@ namespace Panoptic
         void DetailMem(Graphics g, Rectangle r, Snapshot snap)
         {
             var b = DetailHeader(g, r, "Memoria", Format.Bytes(snap.MemTotal));
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             int y = BigGraph(g, b, b.Y, gh, "Uso de memoria", Format.Bytes(snap.MemTotal), snap.MemHistory, 100, ResColors.Memory(th), null);
             Stats(g, b, y, new[]
             {
@@ -458,10 +628,10 @@ namespace Panoptic
         {
             if (d == null) return;
             var b = DetailHeader(g, r, d.Title, d.Name);
-            int gh = Math.Max(S(90), (b.Height - S(300)) * 2 / 3);
+            int gh = S(150);
             int y = BigGraph(g, b, b.Y, gh, "Tiempo activo", "100 %", d.ActivityHistory, 100, ResColors.Disk(th), null);
             float tmax = Math.Max(1048576, d.TransferHistory.Max() * 1.2f);
-            y = BigGraph(g, b, y, Math.Max(S(60), gh / 2), "Velocidad de transferencia del disco", Format.Rate(tmax), d.TransferHistory, tmax, ResColors.Disk(th), null);
+            y = BigGraph(g, b, y, S(90), "Velocidad de transferencia del disco", Format.Rate(tmax), d.TransferHistory, tmax, ResColors.Disk(th), null);
             var big = new List<string[]>
             {
                 new[] { "Tiempo activo", Format.Percent(d.Active) },
@@ -497,7 +667,7 @@ namespace Panoptic
             if (n == null) return;
             var b = DetailHeader(g, r, n.Kind, n.Description);
             float max = Math.Max(125000, Math.Max(n.SendHistory.Max(), n.RecvHistory.Max()) * 1.2f);
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             int y = BigGraph(g, b, b.Y, gh, "Rendimiento (línea punteada: envío)", Format.Bits(max), n.RecvHistory, max, ResColors.Net(th), n.SendHistory);
             Stats(g, b, y, new[]
             {
@@ -519,7 +689,7 @@ namespace Panoptic
         {
             searchBox = r;
             bool focused = search.Focused;
-            Color fill = focused ? (th.Dark ? Theme.Hex(0x1F1F1F) : Theme.Hex(0xFFFFFF)) : (th.Dark ? Theme.Hex(0x2D2D2D) : Theme.Hex(0xFBFBFB));
+            Color fill = SearchFill;
             search.BackColor = fill;
             { var rr = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1); FillRoundP(g, rr, S(4), fill); StrokeRoundP(g, rr, S(4), ControlStroke, 1f); }
             // Línea inferior de acento cuando tiene el foco, como los cuadros de texto de Windows 11.
@@ -571,7 +741,6 @@ namespace Panoptic
         protected override void OnMouseWheel(MouseEventArgs e)
         {
             base.OnMouseWheel(e);
-            if (page == "perf") return;
             int max = Math.Max(0, listContent - listView.Height);
             int want = ScrollTarget - e.Delta * S(96) / 120;
             // Contra el borde: el destino queda en el borde y el resorte recibe un empujón (se pasa y vuelve).
@@ -605,6 +774,12 @@ namespace Panoptic
                 return;
             }
             base.OnMouseMove(e);
+            if (!headerEye.IsEmpty)
+            {
+                float dx = e.X - (headerEye.X + headerEye.Width / 2f), dy = e.Y - (headerEye.Y + headerEye.Height / 2f);
+                Eye.Shared.LookFrom(this, dx * dx + dy * dy <= S(500) * (float)S(500), dx / S(160) * 5.5f, dy / S(160) * 4f);
+                if (Eye.Shared.Moving(Clock.Ms)) RequestMotion();
+            }
             if (page == "hist") Invalidate();
             else if (listView.Contains(e.Location) || draggingThumb) Invalidate(new Rectangle(listView.Right - S(16), listView.Y, S(16), listView.Height));
         }
@@ -620,12 +795,12 @@ namespace Panoptic
         void PaintProcesses(Graphics g, Rectangle c, Snapshot snap)
         {
             int pad = S(24);
-            DrawText(g, "Procesos", fonts.Subtitle, new Rectangle(c.X + pad, c.Y + S(16), S(200), S(32)), th.Text);
+            PageTitle(g, c, "Procesos", null);
             var sel = snap.Procs.FirstOrDefault(p => p.Pid == selectedPid);
             int bw = S(150);
-            StandardButton(g, "end", new Rectangle(c.Right - pad - bw, c.Y + S(16), bw, S(32)), Glyphs.Cancel, "Finalizar tarea", false, sel != null,
+            StandardButton(g, "end", new Rectangle(c.Right - pad - bw, c.Y + S(16), bw, S(32)), null, "Finalizar tarea", true, sel != null,
                 () => { if (sel != null) host.EndTask(sel, this); });
-            SearchBox(g, new Rectangle(c.Right - pad - bw - S(8) - S(260), c.Y + S(16), S(260), S(32)), "Buscar un proceso");
+            SearchBox(g, new Rectangle(c.Right - pad - bw - S(8) - S(200), c.Y + S(16), S(200), S(32)), "Buscar un proceso");
 
             // Encabezados de columna
             int hy = c.Y + S(64);
@@ -637,7 +812,7 @@ namespace Panoptic
             Header(g, cols[5], hy, "GPU", "gpu", true, snap.GpuAvailable ? Format.Percent(snap.Gpu) : null);
             Header(g, cols[4], hy, "PID", "pid", true, null);
             if (NetColumn) Header(g, cols[6], hy, "Red", "net", true, Format.Bits(snap.Procs.Sum(p => NetRate(p.Pid))));
-            LineP(g, ControlStroke, 1, c.X + S(12), hy + S(48), c.Right - S(12), hy + S(48));
+            LineP(g, HeaderLine, 1, c.X + S(12), hy + S(48), c.Right - S(12), hy + S(48));
 
             listView = new Rectangle(c.X, hy + S(49), c.Width, c.Bottom - hy - S(49));
             string q = Query;
@@ -648,7 +823,7 @@ namespace Panoptic
             var apps = Sort(all.Where(p => p.IsApp)).ToList();
             var bg = Sort(all.Where(p => !p.IsApp)).ToList();
 
-            int rowH = S(32);
+            int rowH = S(36);
             listContent = S(40) * 2 + (apps.Count + bg.Count) * rowH + S(8);
             ClampScroll();
             var state = ClipP(g, listView);
@@ -700,13 +875,13 @@ namespace Panoptic
             var inner = new Rectangle(r.X + S(10), r.Y, r.Width - S(20), r.Height);
             if (total != null)
             {
-                DrawText(g, total, fonts.BodyStrong, new Rectangle(inner.X, r.Y + S(6), inner.Width, S(20)), th.Text, flags);
-                DrawText(g, label, fonts.Caption, new Rectangle(inner.X, r.Y + S(26), inner.Width, S(16)), th.TextSecondary, flags);
+                DrawText(g, total, fonts.Body13Strong, new Rectangle(inner.X, r.Y + S(6), inner.Width, S(20)), th.Text, flags);
+                DrawText(g, label, fonts.Caption, new Rectangle(inner.X, r.Y + S(26), inner.Width, S(16)), Mix55, flags);
             }
-            else DrawText(g, label, fonts.Caption, new Rectangle(inner.X, r.Y + S(26), inner.Width, S(16)), th.TextSecondary, flags);
+            else DrawText(g, label, fonts.Caption, new Rectangle(inner.X, r.Y + S(26), inner.Width, S(16)), Mix55, flags);
             if (sortCol == key)
                 Glyph(g, sortAsc ? Glyphs.ChevronUp : Glyphs.ChevronDown, fonts.Glyph12,
-                    new Rectangle(r.X + r.Width / 2 - S(8), r.Y, S(16), S(10)), th.TextSecondary);
+                    new Rectangle(r.X + r.Width / 2 - S(8), r.Y, S(16), S(10)), Mix55);
         }
 
         IEnumerable<ProcMetric> Sort(IEnumerable<ProcMetric> list)
@@ -726,7 +901,7 @@ namespace Panoptic
         int Group(Graphics g, Rectangle c, Rectangle[] cols, int y, string title, List<ProcMetric> list, int rowH, Snapshot snap)
         {
             if (list.Count == 0) return y;
-            DrawText(g, title + " (" + list.Count + ")", fonts.BodyStrong, new Rectangle(c.X + S(24), y + S(12), S(400), S(24)), th.Text);
+            DrawText(g, title + " (" + list.Count + ")", fonts.Body13Strong, new Rectangle(c.X + S(22), y + S(16), S(400), S(18)), th.Text);
             y += S(40);
             foreach (var p in list)
             {
@@ -752,15 +927,14 @@ namespace Panoptic
                 m.Closed += (o, e) => BeginInvoke(new Action(m.Dispose));
                 m.Show(this, pt);
             };
-            if (sel) Fill(g, r, th.Dark ? Color.FromArgb(22, 255, 255, 255) : Color.FromArgb(14, 0, 0, 0), S(4));
+            if (sel) SelectedRow(g, r);
             else HoverFill(g, key, r, S(4));
-            if (sel) Fill(g, new Rectangle(r.X, r.Y + r.Height / 2 - S(8), S(3), S(16)), th.Accent, S(1.5f));
 
-            // Celdas con color según la intensidad, como el Administrador de tareas.
-            Heat(g, cols[1], r, p.Cpu / 100f);
-            Heat(g, cols[2], r, snap.MemTotal > 0 ? (float)p.Memory / snap.MemTotal * 4 : 0);
-            Heat(g, cols[3], r, (float)(p.DiskBps / (20.0 * 1048576)));
-            Heat(g, cols[5], r, p.Gpu / 100f);
+            // Mapa de calor: la celda se tiñe con el color de su métrica, más intenso cuanto más alto el valor.
+            if (p.Cpu > 1) Heat(g, cols[1], r, p.Cpu / 25f, ResColors.Cpu(th));
+            if (p.Memory > 150L * 1048576) Heat(g, cols[2], r, (float)(p.Memory / (2048.0 * 1048576)), ResColors.Memory(th));
+            if (p.DiskBps > 51200) Heat(g, cols[3], r, (float)(p.DiskBps / (20.0 * 1048576)), ResColors.Disk(th));
+            if (p.Gpu > 1) Heat(g, cols[5], r, p.Gpu / 25f, ResColors.Gpu(th));
 
             var ir = new Rectangle(r.X + S(14), r.Y + (r.Height - S(16)) / 2, S(16), S(16));
             if (p.Icon != null) DrawIcon(g, p.Icon, ir);
@@ -769,26 +943,25 @@ namespace Panoptic
             var right = TextFormatFlags.Right | TextFormatFlags.VerticalCenter;
             DrawText(g, Format.Percent(p.Cpu), fonts.Body, Cell(cols[1], r), th.Text, right);
             DrawText(g, Format.Bytes(p.Memory), fonts.Body, Cell(cols[2], r), th.Text, right);
-            DrawText(g, p.DiskBps >= 51200 ? Format.Rate(p.DiskBps) : "0 MB/s", fonts.Body, Cell(cols[3], r), th.Text, right);
-            DrawText(g, p.Pid.ToString(), fonts.Body, Cell(cols[4], r), th.TextSecondary, right);
+            DrawText(g, p.DiskBps >= 51200 ? Format.Rate(p.DiskBps) : "0 MB/s", fonts.Body, Cell(cols[3], r), p.DiskBps >= 51200 ? th.Text : Mix55, right);
+            DrawText(g, p.Pid.ToString(), fonts.Body, Cell(cols[4], r), Mix55, right);
             DrawText(g, Format.Percent(p.Gpu), fonts.Body, Cell(cols[5], r), th.Text, right);
             if (cols[6].Width > 0)
             {
                 double net = NetRate(p.Pid);
-                Heat(g, cols[6], r, (float)(net / (10.0 * 1048576)));
+                if (net >= 1024) Heat(g, cols[6], r, (float)(net / (10.0 * 1048576)), ResColors.Net(th));
                 DrawText(g, net >= 1024 ? Format.Bits(net) : "0 Mbps", fonts.Body, Cell(cols[6], r), th.Text, right);
             }
         }
 
         Rectangle Cell(Rectangle col, Rectangle row) { return new Rectangle(col.X + S(10), row.Y, col.Width - S(20), row.Height); }
 
-        void Heat(Graphics g, Rectangle col, Rectangle row, float intensity)
+        /// <summary>Celda teñida con el color de la métrica: del 10 % al 35 % según la intensidad (0 a 1).</summary>
+        void Heat(Graphics g, Rectangle col, Rectangle row, float intensity, Color c)
         {
             intensity = Math.Max(0, Math.Min(1, intensity));
-            if (intensity < 0.02f) return;
-            var cell = new Rectangle(col.X + S(2), row.Y + S(2), col.Width - S(4), row.Height - S(4));
-            Color baseC = th.Dark ? Theme.Hex(0xE8B730) : Theme.Hex(0xF2C14E);
-            Fill(g, cell, Color.FromArgb((int)(18 + 110 * intensity), baseC), S(3));
+            var cell = new Rectangle(col.X + S(4), row.Y + S(4), col.Width - S(8), row.Height - S(8));
+            Fill(g, cell, Color.FromArgb((int)(255 * (0.10f + 0.25f * intensity)), c), S(3));
         }
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -826,12 +999,12 @@ namespace Panoptic
         void PaintLog(Graphics g, Rectangle c)
         {
             int pad = S(24);
-            DrawText(g, "Registro de actividad", fonts.Subtitle, new Rectangle(c.X + pad, c.Y + S(16), S(320), S(32)), th.Text);
-            int bw = S(124);
-            StandardButton(g, "logfile", new Rectangle(c.Right - pad - bw, c.Y + S(16), bw, S(32)), Glyphs.OpenExternal, "Archivo", false, true, host.OpenLogFile);
-            StandardButton(g, "logexport", new Rectangle(c.Right - pad - 2 * bw - S(8), c.Y + S(16), bw, S(32)), Glyphs.Export, "Exportar", true, true,
+            PageTitle(g, c, "Registro", null);
+            int bw = S(108);
+            StandardButton(g, "logfile", new Rectangle(c.Right - pad - bw, c.Y + S(16), bw, S(32)), null, "Archivo", false, true, host.OpenLogFile);
+            StandardButton(g, "logexport", new Rectangle(c.Right - pad - 2 * bw - S(8), c.Y + S(16), bw, S(32)), null, "Exportar", true, true,
                 () => ShowExportMenu(new Point(c.Right - pad - 2 * bw - S(8), c.Y + S(50))));
-            SearchBox(g, new Rectangle(c.Right - pad - 2 * bw - S(16) - S(240), c.Y + S(16), S(240), S(32)), "Buscar en el registro");
+            SearchBox(g, new Rectangle(c.Right - pad - 2 * bw - S(16) - S(200), c.Y + S(16), S(200), S(32)), "Buscar en el registro");
 
             // Filtros
             int fy = c.Y + S(64);
@@ -865,7 +1038,7 @@ namespace Panoptic
                 {
                     day = e.Time.Date;
                     if (y + dayH >= listView.Y && y <= listView.Bottom)
-                        DrawText(g, DayLabel(e.Time.Date), fonts.BodyStrong, new Rectangle(c.X + pad, y + S(12), S(400), S(24)), th.Text);
+                        DrawText(g, DayLabel(e.Time.Date), fonts.Body13Strong, new Rectangle(c.X + S(22), y + S(16), S(400), S(18)), th.Text);
                     y += dayH;
                 }
                 if (y + rowH >= listView.Y && y <= listView.Bottom) LogRow(g, new Rectangle(c.X + S(12), y, c.Width - S(36), rowH), e);
@@ -920,11 +1093,13 @@ namespace Panoptic
                 m.Show(this, pt);
             };
             HoverFill(g, key, r, S(4));
-            DrawText(g, e.Time.ToString("HH:mm:ss"), fonts.Body, new Rectangle(r.X + S(12), r.Y, S(72), r.Height), th.TextSecondary);
-            Color gc = e.Severity == Severity.Error ? th.Critical : e.Severity == Severity.Advertencia ? th.Caution : th.TextSecondary;
-            Glyph(g, ActivityEntry.CategoryGlyph(e.Category), fonts.Glyph16, new Rectangle(r.X + S(92), r.Y, S(20), r.Height), gc);
-            DrawText(g, ActivityEntry.CategoryName(e.Category), fonts.Caption, new Rectangle(r.X + S(124), r.Y, S(96), r.Height), th.TextSecondary);
-            DrawText(g, e.Message, fonts.Body, new Rectangle(r.X + S(224), r.Y, r.Width - S(236), r.Height), th.Text);
+            // Grilla: hora (70 px) | etiqueta del tipo (108 px) | texto.
+            DrawText(g, e.Time.ToString("HH:mm:ss"), fonts.Body13, new Rectangle(r.X + S(10), r.Y, S(70), r.Height), Mix55);
+            string cat = ActivityEntry.CategoryName(e.Category);
+            Color cc = e.Severity == Severity.Error ? th.Critical : ResColors.Category(th, e.Category);
+            int pw = Math.Min(S(100), MeasureText(cat, fonts.Small) + S(18));
+            Pill(g, new Rectangle(r.X + S(80), r.Y + (r.Height - S(20)) / 2, pw, S(20)), cat, cc);
+            DrawText(g, e.Message, fonts.Body13, new Rectangle(r.X + S(188), r.Y, r.Width - S(198), r.Height), th.Text);
         }
 
         // ------------------------------------------------------------------ posición guardada

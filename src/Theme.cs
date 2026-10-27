@@ -39,47 +39,47 @@ namespace Panoptic
             t.TaskbarLight = !t.Dark;
 
             Color[] palette = ReadAccentPalette();
+            bool sysAccent = Settings.UseWindowsAccent && palette != null;
+            // Lenguaje "isla": superficies casi negras, tarjetas que se separan por un borde fino y un velo mínimo,
+            // y el violeta del iris de la mascota como acento (o el color de Windows, si se elige en Configuración).
+            Color ink = t.Dark ? Color.White : Color.Black;
+            Func<double, Color> veil = a => Color.FromArgb((int)Math.Round(255 * a), ink);
             if (t.Dark)
             {
-                t.Bg = Hex(0x202020); t.Card = Hex(0x2B2B2B); t.CardStroke = Hex(0x1D1D1D);
-                t.Divider = Hex(0x1D1D1D); t.Footer = Hex(0x1C1C1C); t.FooterStroke = Hex(0x2E2E2E);
-                t.WindowStroke = Hex(0x3A3A3A);
-                t.Text = Hex(0xFFFFFF); t.TextSecondary = Hex(0xCFCFCF); t.TextTertiary = Hex(0x9E9E9E);
-                t.TextDisabled = Hex(0x6E6E6E);
-                t.Accent = palette != null ? palette[1] : Hex(0x60CDFF);
+                t.Bg = Hex(0x0A0A0A);
+                t.Text = Hex(0xFFFFFF);
+                t.Accent = sysAccent ? palette[1] : Hex(0xA98BF0);
                 t.OnAccent = Hex(0x000000);
-                t.Caution = Hex(0xFCE100); t.Success = Hex(0x6CCB5F); t.Critical = Hex(0xFF99A4);
-                t.HoverOverlay = Color.FromArgb(15, 255, 255, 255);
-                t.PressedOverlay = Color.FromArgb(8, 255, 255, 255);
-                t.ToggleOffFill = Color.FromArgb(25, 0, 0, 0);
-                t.ToggleOffStroke = Hex(0xCFCFCF);
-                t.MenuBg = Hex(0x2C2C2C); t.MenuHover = Hex(0x383838);
+                t.Caution = Hex(0xFCE100); t.Success = Hex(0x6CCB5F); t.Critical = Hex(0xFF8A80);
+                t.MenuBg = Hex(0x141414);
             }
             else
             {
-                t.Bg = Hex(0xF3F3F3); t.Card = Hex(0xFBFBFB); t.CardStroke = Hex(0xE5E5E5);
-                t.Divider = Hex(0xEAEAEA); t.Footer = Hex(0xEEEEEE); t.FooterStroke = Hex(0xE0E0E0);
-                t.WindowStroke = Hex(0xD6D6D6);
-                t.Text = Hex(0x1A1A1A); t.TextSecondary = Hex(0x5C5C5C); t.TextTertiary = Hex(0x8A8A8A);
-                t.TextDisabled = Hex(0xA6A6A6);
-                t.Accent = palette != null ? palette[4] : Hex(0x005FB8);
+                t.Bg = Hex(0xF3F3F3);
+                t.Text = Hex(0x1A1A1A);
+                t.Accent = sysAccent ? palette[4] : Hex(0x7A57D1);
                 t.OnAccent = Hex(0xFFFFFF);
                 t.Caution = Hex(0x9D5D00); t.Success = Hex(0x0F7B0F); t.Critical = Hex(0xC42B1C);
-                t.HoverOverlay = Color.FromArgb(10, 0, 0, 0);
-                t.PressedOverlay = Color.FromArgb(5, 0, 0, 0);
-                t.ToggleOffFill = Color.FromArgb(6, 0, 0, 0);
-                t.ToggleOffStroke = Hex(0x868686);
-                t.MenuBg = Hex(0xF9F9F9); t.MenuHover = Hex(0xEDEDED);
+                t.MenuBg = Hex(0xFAFAFA);
             }
-            t.AccentHover = Mix(t.Accent, t.Bg, 0.10f);
+            // Textos secundarios opacos (el texto de GDI ignora el canal alfa): blanco o negro al 60, 50 y 35 % sobre el fondo.
+            t.TextSecondary = Mix(t.Bg, ink, 0.60f);
+            t.TextTertiary = Mix(t.Bg, ink, 0.50f);
+            t.TextDisabled = Mix(t.Bg, ink, 0.35f);
+            t.Card = veil(0.035);
+            t.CardStroke = veil(0.06);
+            t.Divider = t.Footer = t.FooterStroke = veil(0.07);
+            t.WindowStroke = veil(0.09);
+            t.ControlFill = veil(0.05);
+            t.HoverOverlay = veil(0.07);
+            t.PressedOverlay = veil(0.04);
+            t.ToggleOffFill = Color.Transparent;
+            t.ToggleOffStroke = Mix(t.Bg, ink, 0.55f);
+            t.MenuHover = Mix(t.MenuBg, ink, 0.07f);
+            t.GraphBg = t.Dark ? Color.FromArgb(115, 0, 0, 0) : Color.FromArgb(10, 0, 0, 0);
+            t.AccentHover = Mix(t.Accent, ink, 0.12f);
             t.AccentPressed = Mix(t.Accent, t.Bg, 0.20f);
             t.AccentDisabled = t.TextDisabled;
-
-            t.Clear = t.Bg;
-            t.Layer = t.Dark ? Hex(0x272727) : Hex(0xF9F9F9);
-            t.LayerStroke = t.Dark ? Hex(0x1D1D1D) : Hex(0xE5E5E5);
-            t.GraphBg = t.Dark ? Hex(0x1C1C1C) : Hex(0xFFFFFF);
-            t.ControlFill = t.Dark ? Hex(0x2D2D2D) : Hex(0xFBFBFB);
 
             t.TransparencyEnabled = ForceGlass.HasValue ? ForceGlass.Value
                 : ReadDword(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) == 1;
@@ -89,33 +89,10 @@ namespace Panoptic
             t.Glass = ForceGlass.HasValue ? ForceGlass.Value
                 : ReadDword(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1) == 1
                   && Environment.OSVersion.Version.Build >= 22621 && !OverlappedContentDisabled();
-            if (t.Glass)
-            {
-                // Tokens de WinUI para superficies sobre Mica/Acrílico.
-                t.Clear = Color.Transparent;
-                if (t.Dark)
-                {
-                    t.Card = Color.FromArgb(13, 255, 255, 255);
-                    t.CardStroke = Color.FromArgb(26, 0, 0, 0);
-                    t.Footer = Color.FromArgb(40, 0, 0, 0);
-                    t.FooterStroke = Color.FromArgb(20, 255, 255, 255);
-                    t.Layer = Color.FromArgb(76, 58, 58, 58);
-                    t.LayerStroke = Color.FromArgb(26, 0, 0, 0);
-                    t.GraphBg = Color.FromArgb(70, 0, 0, 0);
-                    t.ControlFill = Color.FromArgb(15, 255, 255, 255);
-                }
-                else
-                {
-                    t.Card = Color.FromArgb(179, 255, 255, 255);
-                    t.CardStroke = Color.FromArgb(15, 0, 0, 0);
-                    t.Footer = Color.FromArgb(10, 0, 0, 0);
-                    t.FooterStroke = Color.FromArgb(15, 0, 0, 0);
-                    t.Layer = Color.FromArgb(128, 255, 255, 255);
-                    t.LayerStroke = Color.FromArgb(15, 0, 0, 0);
-                    t.GraphBg = Color.FromArgb(150, 255, 255, 255);
-                    t.ControlFill = Color.FromArgb(179, 255, 255, 255);
-                }
-            }
+            // Con transparencia, el fondo es un tinte al 92 % sobre el material del sistema; sin ella, sólido.
+            t.Clear = t.Glass ? Color.FromArgb(235, t.Bg) : t.Bg;
+            t.Layer = t.Clear;
+            t.LayerStroke = Color.Transparent;
             return t;
         }
 
@@ -164,6 +141,9 @@ namespace Panoptic
             }
             catch { return null; }
         }
+
+        /// <summary>Borde de ventana opaco (DWM no admite transparencia): blanco o negro al 9 % sobre el fondo.</summary>
+        public Color WindowBorder { get { return Mix(Bg, Dark ? Color.White : Color.Black, 0.09f); } }
 
         public static Color Hex(int rgb)
         {
@@ -253,6 +233,8 @@ namespace Panoptic
     internal sealed class Fonts : IDisposable
     {
         public Font Caption, CaptionStrong, Body, BodyStrong, Subtitle, Title, Glyph12, Glyph16, Glyph20;
+        /// <summary>Rampa del lenguaje "isla": notas de 11 px, cuerpo de 13 px y números Display de 16, 18 y 22 px.</summary>
+        public Font Small, Body13, Body13Strong, Display16, Display18, Display22;
 
         static string textFamily, strongFamily, displayFamily, iconFamily;
 
@@ -274,6 +256,12 @@ namespace Panoptic
             Glyph12 = new Font(iconFamily, 12f * scale, GraphicsUnit.Pixel);
             Glyph16 = new Font(iconFamily, 16f * scale, GraphicsUnit.Pixel);
             Glyph20 = new Font(iconFamily, 20f * scale, GraphicsUnit.Pixel);
+            Small = new Font(textFamily, 11f * scale, GraphicsUnit.Pixel);
+            Body13 = new Font(textFamily, 13f * scale, GraphicsUnit.Pixel);
+            Body13Strong = new Font(strongFamily, 13f * scale, GraphicsUnit.Pixel);
+            Display16 = new Font(displayFamily, 16f * scale, GraphicsUnit.Pixel);
+            Display18 = new Font(displayFamily, 18f * scale, GraphicsUnit.Pixel);
+            Display22 = new Font(displayFamily, 22f * scale, GraphicsUnit.Pixel);
         }
 
         public static string IconFamily
@@ -297,6 +285,7 @@ namespace Panoptic
             Caption.Dispose(); CaptionStrong.Dispose(); Body.Dispose(); BodyStrong.Dispose();
             Subtitle.Dispose(); Title.Dispose();
             Glyph12.Dispose(); Glyph16.Dispose(); Glyph20.Dispose();
+            Small.Dispose(); Body13.Dispose(); Body13Strong.Dispose(); Display16.Dispose(); Display18.Dispose(); Display22.Dispose();
         }
     }
 }

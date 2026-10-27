@@ -89,6 +89,16 @@ namespace Panoptic
         public static readonly string[] IslandPositions = { "Top", "Taskbar", "Left", "Right" };
         public static readonly string[] IslandPositionNames = { "Arriba", "Abajo", "Izquierda", "Derecha" };
         /// <summary>La isla se esconde en el borde y aparece al acercar el mouse.</summary>
+        /// <summary>Isla negra pegada al borde de arriba, como el notch de la Mac.</summary>
+        public static bool IslandNotch { get { return Flag("IslandNotch", false); } set { SetFlag("IslandNotch", value); } }
+        /// <summary>La isla se esconde mientras la ventana activa está maximizada o pegada arriba, debajo de ella.</summary>
+        public static bool IslandHideCovered { get { return Flag("IslandHideCovered", true); } set { SetFlag("IslandHideCovered", value); } }
+        /// <summary>La mascota (el ojo de Panoptic) en lugar del ícono del programa en la isla.</summary>
+        /// <summary>El ojo parpadea, mira el cursor y cambia de estado (apagado: queda en reposo).</summary>
+        public static bool EyeAnimated { get { return Flag("EyeAnimated", true); } set { SetFlag("EyeAnimated", value); } }
+        /// <summary>Usar el color de acento de Windows en lugar del violeta del iris.</summary>
+        public static bool UseWindowsAccent { get { return Flag("UseWindowsAccent", false); } set { SetFlag("UseWindowsAccent", value); } }
+        public static bool IslandMascot { get { return Flag("IslandMascot", true); } set { SetFlag("IslandMascot", value); } }
         public static bool IslandAutoHide { get { return Flag("IslandAutoHide", false); } set { SetFlag("IslandAutoHide", value); } }
         public static bool IslandHoverExpand { get { return Flag("IslandHoverExpand", false); } set { SetFlag("IslandHoverExpand", value); } }
         public static bool IslandAlerts { get { return Flag("IslandAlerts", true); } set { SetFlag("IslandAlerts", value); } }

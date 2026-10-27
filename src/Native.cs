@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -20,7 +20,7 @@ namespace Panoptic
 
         // Fondo del sistema (Windows 11 22H2+): 1 ninguno, 2 Mica, 3 Acrílico, 4 Mica Alt.
         public const int DWMWA_SYSTEMBACKDROP_TYPE = 38;
-        public const int DWMSBT_NONE = 1, DWMSBT_MICA = 2, DWMSBT_ACRYLIC = 3;
+        public const int DWMSBT_NONE = 1, DWMSBT_MICA = 2, DWMSBT_ACRYLIC = 3, DWMSBT_TRANSIENTWINDOW = 3;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct MARGINS { public int Left, Right, Top, Bottom; }
@@ -151,6 +151,49 @@ namespace Panoptic
                 return st == 2 || st == 3 || st == 4;
             }
             catch { return false; }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WinRect { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
+        [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
+        [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out WinRect r);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] static extern int GetClassName(IntPtr h, StringBuilder name, int max);
+
+        /// <summary>
+        /// La ventana activa (que no sea <paramref name="self"/>, el escritorio ni la barra de tareas) está maximizada
+        /// o pegada al borde de arriba, y tapa el rectángulo <paramref name="area"/> (en pantalla).
+        /// </summary>
+        public static bool ForegroundCovers(System.Drawing.Rectangle area, int workTop, IntPtr self)
+        {
+            try
+            {
+                IntPtr h = GetForegroundWindow();
+                if (h == IntPtr.Zero || h == self || !IsWindowVisible(h) || IsIconic(h)) return false;
+                var cls = new StringBuilder(64);
+                GetClassName(h, cls, cls.Capacity);
+                string c = cls.ToString();
+                if (c == "Progman" || c == "WorkerW" || c == "Shell_TrayWnd" || c == "Shell_SecondaryTrayWnd") return false;
+                WinRect r;
+                if (!GetWindowRect(h, out r)) return false;
+                var wr = System.Drawing.Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom);
+                if (!wr.IntersectsWith(area)) return false;
+                return IsZoomed(h) || r.Top <= workTop + 8;
+            }
+            catch { return false; }
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct LASTINPUTINFO { public uint cbSize, dwTime; }
+        [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO info);
+
+        /// <summary>Milisegundos desde la última vez que se usó el mouse o el teclado.</summary>
+        public static long IdleMs()
+        {
+            var li = new LASTINPUTINFO { cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO)) };
+            if (!GetLastInputInfo(ref li)) return 0;
+            return unchecked((uint)Environment.TickCount - li.dwTime);
         }
 
         [DllImport("user32.dll")] public static extern bool DestroyIcon(IntPtr h);

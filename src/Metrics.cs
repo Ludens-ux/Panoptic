@@ -788,6 +788,12 @@ namespace Panoptic
 
         public static string Ghz(double mhz) { return (mhz / 1000).ToString("0.00", Es) + " GHz"; }
 
+        /// <summary>Minutos como "48 min" o "1 h 12 min".</summary>
+        public static string Minutes(int m)
+        {
+            return m >= 60 ? (m / 60) + " h " + (m % 60) + " min" : m + " min";
+        }
+
         public static string Duration(TimeSpan t)
         {
             if (t.TotalDays >= 1) return (int)t.TotalDays + " d " + t.Hours + " h";

@@ -15,7 +15,7 @@ namespace Panoptic
         void DetailGpu(Graphics g, Rectangle r, Snapshot snap)
         {
             var b = DetailHeader(g, r, "GPU", snap.GpuName);
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             int y = BigGraph(g, b, b.Y, gh, "% de uso" + (string.IsNullOrEmpty(snap.GpuEngine) ? "" : " (motor más usado: " + snap.GpuEngine + ")"), "100 %",
                 snap.GpuHistory, 100, ResColors.Gpu(th), null);
             var top = snap.Procs.Where(p => p.Gpu > 0.5f).OrderByDescending(p => p.Gpu).FirstOrDefault();
@@ -35,7 +35,7 @@ namespace Panoptic
         void DetailTemp(Graphics g, Rectangle r, Snapshot snap)
         {
             var b = DetailHeader(g, r, "Temperatura CPU", "Sensor térmico del equipo (ACPI)");
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             float[] hist = snap.TempHistory;
             int y = BigGraph(g, b, b.Y, gh, "Temperatura (°C)", "110 °C", hist, 110, ResColors.Temp(th), null);
             float max = hist.Where(v => v > 0).DefaultIfEmpty(0).Max(), min = hist.Where(v => v > 0).DefaultIfEmpty(0).Min();
@@ -50,14 +50,14 @@ namespace Panoptic
                 new[] { "Fuente:", "Sensor del equipo (ACPI)" },
             });
             DrawText(g, "Es la temperatura que informa el equipo; puede diferir de la de cada núcleo del procesador.", fonts.Caption,
-                new Rectangle(b.X, b.Bottom - S(20), b.Width, S(18)), th.TextTertiary);
+                new Rectangle(b.X, detailBottom + S(2), b.Width, S(18)), th.TextTertiary); detailBottom += S(22);
         }
 
         void DetailBattery(Graphics g, Rectangle r, Snapshot snap)
         {
             string state = snap.OnAc ? (snap.Charging ? "Cargando" : "Enchufada") : "Con batería";
             var b = DetailHeader(g, r, "Batería", state);
-            int gh = Math.Max(S(120), b.Height - S(250));
+            int gh = GraphH(b);
             int y = BigGraph(g, b, b.Y, gh, "Carga en 60 segundos", "100 %", snap.BatteryHistory, 100, ResColors.Battery(th), null);
             string remaining = snap.BatteryMinutes > 0 ? (snap.BatteryMinutes / 60) + " h " + (snap.BatteryMinutes % 60) + " min" : (snap.OnAc ? "—" : "Calculando…");
             string rate = snap.BatteryRateMw != 0 ? (Math.Abs(snap.BatteryRateMw) / 1000.0).ToString("0.0", Format.Es) + " W" + (snap.BatteryRateMw > 0 ? " (cargando)" : " (consumo)") : "—";
@@ -74,7 +74,7 @@ namespace Panoptic
             });
             if (snap.BatteryHealth <= 0)
                 DrawText(g, "La salud de la batería se calcula con la capacidad de diseño; este equipo no la informa sin permisos de administrador.",
-                    fonts.Caption, new Rectangle(b.X, b.Bottom - S(20), b.Width, S(18)), th.TextTertiary);
+                    fonts.Caption, new Rectangle(b.X, detailBottom + S(2), b.Width, S(18)), th.TextTertiary); detailBottom += S(22);
         }
 
         // ================================================================== Historial
@@ -109,7 +109,7 @@ namespace Panoptic
             if (pts.Any(p => !float.IsNaN(p.Battery)))
                 charts.Add(Tuple.Create("Batería", (Func<HistoryPoint, float>)(p => p.Battery), 100f, ResColors.Battery(th), (Func<float, string>)(v => v.ToString("0") + " %")));
 
-            int chartH = S(176);
+            int chartH = S(158);
             listContent = charts.Count * (chartH + S(12)) + S(8);
             ClampScroll();
             var state = ClipP(g, listView);
@@ -131,7 +131,7 @@ namespace Panoptic
             Func<float, string> fmt, DateTime from, DateTime to)
         {
             Card(g, r);
-            var gr = new Rectangle(r.X + S(16), r.Y + S(40), r.Width - S(32), r.Height - S(70));
+            var gr = new Rectangle(r.X + S(16), r.Y + S(42), r.Width - S(32), S(90));
             int cols = Math.Max(2, gr.Width);
             double total = (to - from).TotalSeconds;
 
@@ -170,12 +170,13 @@ namespace Panoptic
             }
             var series = cached.Item1;
 
-            DrawText(g, title, fonts.BodyStrong, new Rectangle(r.X + S(16), r.Y + S(10), S(260), S(22)), th.Text);
+            DrawText(g, title, fonts.BodyStrong, new Rectangle(r.X + S(16), r.Y + S(12), S(260), S(22)), color);
             if (cached.Item4 > 0)
-                DrawText(g, "Promedio " + fmt(cached.Item2) + "   ·   Máximo " + fmt(cached.Item3), fonts.Caption,
-                    new Rectangle(r.X + S(280), r.Y + S(10), r.Width - S(296), S(22)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
-            FillRoundP(g, gr, 0, th.GraphBg);
-            for (int i = 1; i < 4; i++) { int yy = gr.Y + gr.Height * i / 4; LineP(g, Color.FromArgb(th.Dark ? 28 : 36, color), 1, gr.X, yy, gr.Right, yy); }
+                DrawText(g, "Promedio " + fmt(cached.Item2) + " · Máximo " + fmt(cached.Item3), fonts.Caption,
+                    new Rectangle(r.X + S(280), r.Y + S(12), r.Width - S(296), S(22)), th.TextSecondary, TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+            FillRoundP(g, gr, S(4), th.GraphBg);
+            Color guide = th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
+            for (int i = 1; i < 4; i++) { int yy = gr.Y + gr.Height * i / 4; LineP(g, guide, 1, gr.X, yy, gr.Right, yy); }
 
             var st = ClipP(g, Rectangle.Intersect(gr, listView));
             var seg = new List<PointF>();
@@ -184,8 +185,8 @@ namespace Panoptic
                 if (seg.Count >= 2)
                 {
                     var line = seg.ToArray();
-                    AreaP(g, UnderArea(line, gr.Bottom), Color.FromArgb(th.Dark ? 60 : 45, color));
-                    LinesP(g, line, color, Math.Max(1.2f, 1.5f * s));
+                    AreaP(g, UnderArea(line, gr.Bottom), Color.FromArgb(46, color));
+                    LinesP(g, line, color, Math.Max(1.2f, 1.8f * s));
                 }
                 else if (seg.Count == 1)
                     FillEllipseP(g, new RectangleF(seg[0].X - 2 * s, seg[0].Y - 2 * s, 4 * s, 4 * s), color);
@@ -209,7 +210,8 @@ namespace Panoptic
                 string label = t.ToString(historyRange == 2 ? "ddd d HH:mm" : "HH:mm", Format.Es) + "   " + (float.IsNaN(series[i]) ? "sin datos" : fmt(series[i]));
                 int lw = MeasureText(label, fonts.Caption) + S(16);
                 var lr = new Rectangle(Math.Min(gr.Right - lw, mouse.X + S(8)), gr.Y + S(6), lw, S(24));
-                Fill(g, lr, th.Dark ? Color.FromArgb(235, 44, 44, 44) : Color.FromArgb(240, 252, 252, 252), S(4));
+                Fill(g, lr, th.MenuBg, S(4));
+                StrokeRoundP(g, new RectangleF(lr.X + .5f, lr.Y + .5f, lr.Width - 1, lr.Height - 1), S(4), th.WindowStroke, 1f);
                 DrawText(g, label, fonts.Caption, lr, th.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             }
             UnclipP(g, st);
@@ -226,6 +228,15 @@ namespace Panoptic
         int connFilter = 0; // 0 todas, 1 establecidas, 2 en escucha, 3 UDP
         List<Connection> connections = new List<Connection>();
         DateTime connAt = DateTime.MinValue;
+
+        /// <summary>Estado con color: establecida en verde, en escucha en naranja, UDP en celeste.</summary>
+        Color? ConnColor(Connection x)
+        {
+            if (x.Proto.StartsWith("UDP")) return ResColors.Gpu(th);
+            if (x.Listening) return ResColors.Net(th);
+            if (x.State == "Establecida") return ResColors.Disk(th);
+            return null;
+        }
 
         void PaintConnections(Graphics g, Rectangle c, Snapshot snap)
         {
@@ -291,7 +302,7 @@ namespace Panoptic
                     return string.IsNullOrEmpty(x.Host) ? Endpoint(x.Remote, x.RemotePort) : x.Host + ":" + x.RemotePort;
                 }),
                 new Column { Title = "Estado", Width = 120, Text = o => ((Connection)o).State,
-                    Color = o => ((Connection)o).Listening && (((Connection)o).Local == "0.0.0.0" || ((Connection)o).Local == "::") ? (Color?)th.Caution : null },
+                    Color = o => ConnColor((Connection)o) },
             };
             if (traffic)
             {
@@ -458,7 +469,7 @@ namespace Panoptic
             {
                 Col("Nombre", 0, false, o => ((ServiceItem)o).Display),
                 Col("Nombre del servicio", 200, false, o => ((ServiceItem)o).Name),
-                new Column { Title = "Estado", Width = 120, Text = o => ((ServiceItem)o).Status, Color = o => ((ServiceItem)o).Running ? (Color?)th.Text : null },
+                new Column { Title = "Estado", Width = 120, Text = o => ((ServiceItem)o).Status, Color = o => ((ServiceItem)o).Running ? ResColors.Disk(th) : th.TextTertiary },
                 Col("Tipo de inicio", 180, false, o => ((ServiceItem)o).StartType),
             };
             Table(g, new Rectangle(c.X, c.Y + S(72) + used, c.Width, c.Bottom - (c.Y + S(72) + used)), "services", cols, rows.Cast<object>().ToList(),
@@ -506,7 +517,7 @@ namespace Panoptic
             var state = ClipP(g, listView);
             int x = c.X + S(24), w = Math.Min(c.Width - S(48), S(900));
             int y = listView.Y - ScrollPos;
-            int rowH = S(68), gap = S(4);
+            int rowH = S(64), gap = S(4);
 
             Action<string> section = t => { DrawText(g, t, fonts.BodyStrong, new Rectangle(x, y + S(12), w, S(22)), th.Text); y += S(42); };
             Action<string, string, string, bool, Action> toggle = (glyph, title, desc, on, click) =>
@@ -528,6 +539,8 @@ namespace Panoptic
             section("General");
             toggle(Glyphs.Startup, "Iniciar con Windows", "Abrir el monitor en el área de notificación al iniciar sesión", host.Autostart, host.ToggleAutostart);
             toggle(Glyphs.Widget, "Widget en el escritorio", "Mostrar el widget con los anillos de uso", host.WidgetVisible, host.ToggleWidget);
+            toggle("", "Usar color de Windows", "El color de acento del sistema en lugar del violeta de Panoptic", Settings.UseWindowsAccent,
+                () => { Settings.UseWindowsAccent = !Settings.UseWindowsAccent; ReloadTheme(); host.WidgetChanged(); });
             {
                 var cr = SettingCard(g, new Rectangle(x, y, w, rowH), "", "Atajo de teclado", "Abre o cierra esta ventana desde cualquier programa", S(220));
                 var br = new Rectangle(cr.Right - S(220), cr.Y + (cr.Height - S(32)) / 2, S(220), S(32));
@@ -566,16 +579,20 @@ namespace Panoptic
 
             // ---- Widget
             section("Widget");
-            segmented(Glyphs.Widget, "Estilo", "El widget clásico con anillos o la isla dinámica arriba de la pantalla",
-                new[] { "Widget", "Isla" }, Settings.IsIsland ? 1 : 0, i => { Settings.WidgetStyle = i == 1 ? "Isla" : "Widget"; host.WidgetChanged(); });
+            segmented(Glyphs.Widget, "Estilo", "El widget clásico con anillos, la isla dinámica o un notch negro pegado arriba, como en la Mac",
+                new[] { "Widget", "Isla", "Notch" }, !Settings.IsIsland ? 0 : Settings.IslandNotch ? 2 : 1,
+                i => { Settings.WidgetStyle = i == 0 ? "Widget" : "Isla"; if (i > 0) Settings.IslandNotch = i == 2; host.WidgetChanged(); });
 
             if (Settings.IsIsland)
             {
-                segmented("", "Posición", "Abajo es sobre la barra de tareas; en los costados se muestra vertical",
-                    Settings.IslandPositionNames, Math.Max(0, Array.IndexOf(Settings.IslandPositions, Settings.IslandPosition)),
-                    i => { Settings.IslandPosition = Settings.IslandPositions[i]; host.WidgetChanged(); });
+                if (!Settings.IslandNotch)
+                    segmented("", "Posición", "Abajo es sobre la barra de tareas; en los costados se muestra vertical",
+                        Settings.IslandPositionNames, Math.Max(0, Array.IndexOf(Settings.IslandPositions, Settings.IslandPosition)),
+                        i => { Settings.IslandPosition = Settings.IslandPositions[i]; host.WidgetChanged(); });
                 toggle("", "Ocultar automáticamente", "Se esconde en el borde y aparece al acercar el mouse (también con las alertas)", Settings.IslandAutoHide,
                     () => { Settings.IslandAutoHide = !Settings.IslandAutoHide; host.WidgetChanged(); });
+                toggle("", "Ocultar con ventanas maximizadas", "Se esconde mientras la ventana activa está maximizada o pegada arriba, y aparece al acercar el mouse al borde", Settings.IslandHideCovered,
+                    () => { Settings.IslandHideCovered = !Settings.IslandHideCovered; host.WidgetChanged(); });
                 toggle("", "Expandir al pasar el mouse", "Se abre a los 250 ms y se cierra al salir; si no, con un clic", Settings.IslandHoverExpand,
                     () => { Settings.IslandHoverExpand = !Settings.IslandHoverExpand; host.WidgetChanged(); });
                 toggle(Glyphs.Warning, "Mostrar alertas en la isla", "Descargas, temperatura alta, procesos que acaparan la CPU, cargador y USB", Settings.IslandAlerts,
@@ -627,6 +644,14 @@ namespace Panoptic
                 y += rowH + gap;
             }
             }
+
+            // ---- Mascota
+            section("Mascota");
+            toggle("", "Ojo animado", "Parpadea, mira el cursor y cambia según la PC; apagado, queda en reposo", Settings.EyeAnimated,
+                () => { Settings.EyeAnimated = !Settings.EyeAnimated; host.WidgetChanged(); });
+            if (Settings.IsIsland)
+                toggle("", "Ojo en la isla", "En lugar del ícono del programa, el ojo en la isla flotante", Settings.IslandMascot,
+                    () => { Settings.IslandMascot = !Settings.IslandMascot; host.WidgetChanged(); });
 
             // ---- Alertas
             section("Alertas");

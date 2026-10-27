@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -115,6 +115,7 @@ namespace Panoptic
         /// <summary>Puntos de color en la compacta mientras la cámara (verde) o el micrófono (naranja) están en uso.</summary>
         void PaintPrivacyDots(Graphics g)
         {
+            if (Mascot) return;   // con la mascota, el punto va en el ojo
             if (!camOn && !micOn) return;
             var r = AreaRect;
             float d = S(6), x = r.Right - S(8) - d, y = r.Y + S(5);

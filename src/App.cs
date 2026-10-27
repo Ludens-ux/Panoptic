@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -322,7 +322,7 @@ namespace Panoptic
             bool redraw = sig.ToString() != iconSignature;
             iconSignature = sig.ToString();
             if (redraw)
-            using (var bmp = app ? TrayIcon.DrawApp(size) : TrayIcon.Draw(cpu, snap != null ? snap.CpuHistory : null, th, size))
+            using (var bmp = app ? Eye.DrawTray(size, th.TaskbarLight) : TrayIcon.Draw(cpu, snap != null ? snap.CpuHistory : null, th, size))
             {
                 IntPtr h = bmp.GetHicon();
                 tray.Icon = Icon.FromHandle(h);
@@ -339,34 +339,6 @@ namespace Panoptic
     /// <summary>Ícono de bandeja: mini gráfico del uso de CPU de los últimos segundos.</summary>
     internal static class TrayIcon
     {
-        /// <summary>El ícono del programa: cuadrado redondeado azul con el símbolo de rendimiento (igual que app.ico).</summary>
-        public static Bitmap DrawApp(int size)
-        {
-            var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.Clear(Color.Transparent);
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
-                float w = size - 1;
-                using (var path = Theme.Round(new RectangleF(0, 0, w, w), size * 0.22f))
-                using (var b = new LinearGradientBrush(new Point(0, 0), new Point(size, size), Color.FromArgb(0, 120, 212), Color.FromArgb(0, 90, 158)))
-                    g.FillPath(b, path);
-                if (size < 28)
-                {
-                    // En tamaños chicos el marco del símbolo se pierde: solo la línea de pulso, más gruesa.
-                    var pts = new[] { new PointF(.16f, .54f), new PointF(.36f, .54f), new PointF(.46f, .26f), new PointF(.58f, .76f), new PointF(.67f, .46f), new PointF(.84f, .46f) };
-                    for (int i = 0; i < pts.Length; i++) pts[i] = new PointF(pts[i].X * size, pts[i].Y * size);
-                    using (var pen = new Pen(Color.White, Math.Max(1.4f, size / 11f)) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round })
-                        g.DrawLines(pen, pts);
-                }
-                else
-                using (var f = new Font(Fonts.IconFamily, size * 0.62f, GraphicsUnit.Pixel))
-                using (var sf = new StringFormat(StringFormat.GenericTypographic) { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
-                    g.DrawString("", f, Brushes.White, new RectangleF(0, 0, size, size), sf);
-            }
-            return bmp;
-        }
 
         public static Bitmap Draw(float cpu, float[] history, Theme th, int size)
         {

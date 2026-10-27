@@ -41,6 +41,11 @@ namespace Panoptic
         DateTime insideSince = DateTime.MinValue, outsideSince = DateTime.MinValue;
         bool wasInside;
 
+        // ---- Mascota: el ojo de Panoptic
+        static Eye eye { get { return Eye.Shared; } }
+        Rectangle eyeArea;                   // dónde se dibujó el ojo (coordenadas de la forma); vacío si no está
+        static bool Mascot { get { return Settings.IslandMascot; } }
+
         // ---- Fuentes propias de la isla
         Font fValue13, fSmall11, fDisplay16, fDisplay18, fCaption12;
 
@@ -60,7 +65,7 @@ namespace Panoptic
             layered = !DisableLayered && !th.Glass;
             poll.Interval = 100;
             poll.Tick += (o, e) => OnPoll();
-            screenCheck.Interval = 1000;
+            screenCheck.Interval = 300;
             screenCheck.Tick += (o, e) => CheckFullScreen();
             SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
             Activity.Added += OnActivity;
@@ -80,6 +85,15 @@ namespace Panoptic
         }
 
         protected override bool ShowWithoutActivation { get { return true; } }
+
+        protected override Theme LoadTheme()
+        {
+            // La isla es siempre una píldora negra (como el notch): tema oscuro y sin transparencia del sistema.
+            bool? dark = Theme.ForceDark, glass = Theme.ForceGlass;
+            Theme.ForceDark = true; Theme.ForceGlass = false;
+            try { return Theme.Load(); }
+            finally { Theme.ForceDark = dark; Theme.ForceGlass = glass; }
+        }
 
         protected override int Backdrop { get { return Native.DWMSBT_ACRYLIC; } }
 
@@ -156,7 +170,20 @@ namespace Panoptic
             try { using (new FontFamily(a)) return a; } catch { return b; }
         }
 
-        string Pos { get { return Settings.IslandPosition; } }
+        /// <summary>Estilo notch: negro, pegado al borde de arriba, con las esquinas de abajo redondeadas.</summary>
+        static bool Notch { get { return Settings.IslandNotch; } }
+        string Pos { get { return Notch ? "Top" : Settings.IslandPosition; } }
+        string LayoutKey { get { return Pos + (Notch ? "/notch" : ""); } }
+
+        /// <summary>Radio de las esquinas de abajo del notch: crece al expandirse.</summary>
+        float NotchRadius
+        {
+            get
+            {
+                float k = Math.Max(0, Math.Min(1, (cur.Height - 38) / (244 - 38)));
+                return S(11 + 11 * k);
+            }
+        }
         bool Top { get { return Pos == "Top"; } }
         /// <summary>A la izquierda o a la derecha de la pantalla: la compacta es vertical.</summary>
         bool Side { get { return Pos == "Left" || Pos == "Right"; } }
@@ -180,7 +207,7 @@ namespace Panoptic
         Rectangle HomeShape(int w, int h)
         {
             var wa = Screen.PrimaryScreen.WorkingArea;
-            int gap = S(10);
+            int gap = Notch ? 0 : S(10);
             switch (Pos)
             {
                 case "Taskbar": return new Rectangle(wa.X + (wa.Width - w) / 2, wa.Bottom - gap - h, w, h);   // crece hacia arriba
@@ -211,7 +238,7 @@ namespace Panoptic
             var sc = Screen.PrimaryScreen;
             SetScale(Native.ScaleForPoint(new Point(sc.WorkingArea.X + sc.WorkingArea.Width / 2, sc.WorkingArea.Y + 5)));
             expanded = false;
-            lastPos = Pos;
+            lastPos = LayoutKey;
             hideK = slideFrom = slideTo = vHide = 0;
             resizing = false; vW = vH = 0;
             autoHidden = false;
@@ -239,7 +266,7 @@ namespace Panoptic
 
         void ChangePosition()
         {
-            lastPos = Pos;
+            lastPos = LayoutKey;
             expanded = false;
             cur = from = to = TargetSize();
             resizing = false; vW = vH = 0;
@@ -253,7 +280,7 @@ namespace Panoptic
         /// <summary>Recalcula el tamaño y la posición después de un cambio en Configuración.</summary>
         public void Relayout()
         {
-            if (Pos != lastPos) { lastPos = Pos; ReloadTheme(); ChangePosition(); return; }
+            if (LayoutKey != lastPos) { lastPos = LayoutKey; ReloadTheme(); ChangePosition(); return; }
             ReloadTheme();
             StartResize();
             UpdatePolling();
@@ -275,8 +302,25 @@ namespace Panoptic
             base.WndProc(ref m);
         }
 
+        // ---- Ventana maximizada (o pegada arriba) debajo de la isla: se oculta como con "Ocultar automáticamente".
+        bool covered;
+
+        /// <summary>Se esconde en el borde: por la opción, o porque hay una ventana maximizada debajo.</summary>
+        bool AutoHideNow { get { return Settings.IslandAutoHide || covered; } }
+
+        void CheckCovered()
+        {
+            bool c = Settings.IslandHideCovered && !App.ProfileMode && !previewMode &&
+                Native.ForegroundCovers(HomeShape(S(cur.Width), S(cur.Height)), Screen.PrimaryScreen.WorkingArea.Top, Handle);
+            if (c == covered) return;
+            covered = c;
+            if (c) nearUntil = DateTime.MinValue;   // se va enseguida, sin esperar a que el mouse se aleje
+            UpdatePolling();
+        }
+
         void CheckFullScreen()
         {
+            CheckCovered();
             bool fs = !App.ProfileMode && Native.FullScreenAppRunning();
             if (fs == fullScreen) return;
             fullScreen = fs;
@@ -422,7 +466,7 @@ namespace Panoptic
             get
             {
                 double now = Clock.Ms;
-                return resizing || now - fadeStart < 400 || hideK != slideTo || vHide != 0 || ValuesMoving();
+                return resizing || now - fadeStart < 400 || hideK != slideTo || vHide != 0 || ValuesMoving() || (Mascot && eye.Moving(now));
             }
         }
 
@@ -555,9 +599,10 @@ namespace Panoptic
             }
 
             var g = surface.Graphics;
+            if (Notch) { RenderNotchGdi(g, shape); return; }
             float rad = S(8);
             Color border = active != null && active.Critical && !expanded ? th.Critical
-                : th.Dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
+                : Color.FromArgb(23, 255, 255, 255);
             string frameKey = shape + "|" + border.ToArgb() + "|" + th.Dark;
             if (frameKey == lastFrameKey)
             {
@@ -601,6 +646,30 @@ namespace Panoptic
             surface.Present(Handle, canvas.Location);
         }
 
+        void RenderNotchGdi(Graphics g, Rectangle shape)
+        {
+            lastFrameKey = null;
+            g.CompositingMode = CompositingMode.SourceCopy;
+            g.Clear(Color.Transparent);
+            g.CompositingMode = CompositingMode.SourceOver;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            float ear = S(7);
+            using (var b = new SolidBrush(Color.Black))
+            {
+                g.FillPolygon(b, NotchEar(shape.X, shape.Y, ear, -1));
+                g.FillPolygon(b, NotchEar(shape.Right, shape.Y, ear, 1));
+            }
+            using (var p = Theme.Round(new RectangleF(shape.X, shape.Y, shape.Width, shape.Height), NotchRadius, false, true))
+            using (var tb = new TextureBrush(content, WrapMode.Clamp))
+            {
+                tb.TranslateTransform(shape.X, shape.Y);
+                g.CompositingMode = CompositingMode.SourceCopy;
+                g.FillPath(tb, p);
+                g.CompositingMode = CompositingMode.SourceOver;
+            }
+            surface.Present(Handle, canvas.Location);
+        }
+
         // ---- Direct2D: la isla se dibuja con la placa de video (texto con DirectWrite). Si no está disponible o
         // falla, se vuelve al dibujado con GDI+ de abajo.
         D2DPainter gpu;
@@ -623,7 +692,7 @@ namespace Panoptic
             contentOffset = shape.Location;
             float rad = S(8);
             Color border = active != null && active.Critical && !expanded ? th.Critical
-                : th.Dark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
+                : Color.FromArgb(23, 255, 255, 255);
             // Solo la forma y su sombra: el resto del lienzo queda transparente (se limpia si la zona cambió).
             var zone = Rectangle.Intersect(Rectangle.Inflate(shape, ShadowMargin, ShadowMargin), new Rectangle(0, 0, surface.Width, surface.Height));
             if (zone != gpuZone)
@@ -640,6 +709,7 @@ namespace Panoptic
             {
                 gpu.Begin(surface.Hdc, zone);
                 gpu.Clear(Color.Transparent);
+                if (Notch) { ok = RenderNotchGpu(shape); goto present; }
                 // Sombra suave en capas.
                 for (int i = 4; i >= 1; i--)
                 {
@@ -657,6 +727,7 @@ namespace Panoptic
                 gpu.PopLayer();
                 gpu.StrokeRound(new RectangleF(shape.X + .5f, shape.Y + .5f, shape.Width - 1, shape.Height - 1), rad, border, 1f);
                 ok = gpu.End();
+            present: ;
             }
             catch
             {
@@ -670,6 +741,42 @@ namespace Panoptic
             if (!ok) { lastVibrancy = null; lastFrameKey = null; return false; }   // la placa de video se reinició: este cuadro con GDI+
             surface.Present(Handle, canvas.Location);
             return true;
+        }
+
+        /// <summary>
+        /// Notch: forma negra sin sombra ni borde, recta arriba (contra el borde de la pantalla), con las esquinas
+        /// de abajo redondeadas y dos curvas cóncavas arriba que la unen al borde, como el de la Mac.
+        /// </summary>
+        bool RenderNotchGpu(Rectangle shape)
+        {
+            float rad = NotchRadius, ear = S(7);
+            var sf = new RectangleF(shape.X, shape.Y, shape.Width, shape.Height);
+            gpu.FillPolygon(NotchEar(sf.X, sf.Y, ear, -1), Color.Black);
+            gpu.FillPolygon(NotchEar(sf.Right, sf.Y, ear, 1), Color.Black);
+            gpu.PushClip(sf);
+            gpu.PushRoundMask(new RectangleF(sf.X, sf.Y - rad, sf.Width, sf.Height + rad), rad);
+            gpu.PushTranslate(shape.X, shape.Y);
+            d2d = gpu;
+            try { using (var g = Graphics.FromImage(noTarget)) PaintAll(g); }
+            finally { d2d = null; }
+            gpu.PopTransform();
+            gpu.PopLayer();
+            gpu.PopClip();
+            return gpu.End();
+        }
+
+        /// <summary>Curva cóncava que une el notch con el borde de arriba, del lado izquierdo (dir -1) o derecho (1).</summary>
+        static PointF[] NotchEar(float x, float y, float r, int dir)
+        {
+            var pts = new List<PointF>();
+            pts.Add(new PointF(x, y));
+            float cx = x + dir * r, cy = y + r;
+            for (int i = 0; i <= 8; i++)
+            {
+                double a = Math.PI / 2 * i / 8;
+                pts.Add(new PointF(cx - dir * r * (float)Math.Cos(a), cy - r * (float)Math.Sin(a)));
+            }
+            return pts.ToArray();
         }
 
         static double CubicBezier(double t, double x1, double y1, double x2, double y2)
@@ -690,6 +797,7 @@ namespace Panoptic
             double now = Clock.Ms;
             float dt = (float)Math.Min(0.05, Math.Max(0.001, (now - lastAnim) / 1000.0));
             lastAnim = now;
+            if (Mascot) eye.Step(now);
             bool resized = false;
             if (resizing)
             {
@@ -824,6 +932,7 @@ namespace Panoptic
             active = queue[0];
             queue.RemoveAt(0);
             active.Until = DateTime.Now.AddSeconds(active.Seconds);
+            EyeReact(active);
             UpdateBorder();
             StartResize();
             Invalidate();
@@ -838,6 +947,27 @@ namespace Panoptic
             StartResize();
             BeginInvoke(new Action(NextContext));
             BeginInvoke(new Action(UpdateVisibility));
+        }
+
+        /// <summary>Le pasa al ojo compartido lo que vigila la isla (internet, cámara y micrófono) y su estado.</summary>
+        void UpdateEye()
+        {
+            eye.Offline = offlineNotified;
+            eye.Camera = camOn;
+            eye.Microphone = micOn;
+            eye.Observe(host.Latest);
+            if (Mascot && Visible && eye.Moving(Clock.Ms)) StartAnim();
+        }
+
+        /// <summary>El ojo reacciona a un aviso nuevo de la isla.</summary>
+        void EyeReact(Ctx c)
+        {
+            if (!Mascot || c == null) return;
+            if (c.Kind == "shot") eye.Flash();
+            else if (c.Kind == "usb") eye.LookDown();
+            else eye.Surprise();
+            if (c.Kind == "charger" || c.Key == "batfull") eye.HappyUntil = DateTime.Now.AddSeconds(10);
+            UpdateEye();
         }
 
         void OnData()
@@ -913,6 +1043,7 @@ namespace Panoptic
             if (!expanded && active == null && download == null) StartResize(); // por si cambió la cantidad de anillos (por ejemplo, la batería)
             if (!Visible) return;
             if (!anim.Running && ValuesMoving()) StartAnim();
+            UpdateEye();   // después de revisar los eventos (cámara, micrófono, internet)
             Invalidate();
         }
 
@@ -920,6 +1051,9 @@ namespace Panoptic
         void OnActivity(ActivityEntry e)
         {
             if ((DateTime.Now - e.Time).TotalSeconds > 10) return;
+            if (e.Message.StartsWith("Ejecución sospechosa") ||
+                (e.Category == Category.Seguridad && (e.Message.StartsWith("Inicio de sesión fallido") || e.Message.StartsWith("Se bloqueó la cuenta"))))
+                try { BeginInvoke(new Action(() => { eye.GuardUntil = DateTime.Now.AddSeconds(8); UpdateEye(); })); } catch { }
             if (e.Category == Category.Bloqueo || e.Category == Category.Red)
             {
                 try { BeginInvoke(new Action(() => { if (e.Category == Category.Bloqueo) OnWriteBlocker(e); else OnNetworkActivity(e.Message); })); } catch { }
@@ -954,14 +1088,15 @@ namespace Panoptic
 
         void UpdatePolling()
         {
-            if (!Settings.IslandAutoHide) SetAutoHidden(false);
-            if (expanded || Settings.IslandHoverExpand || Settings.IslandAutoHide || fullScreen) poll.Start(); else poll.Stop();
+            if (!AutoHideNow) SetAutoHidden(false);
+            if (expanded || Settings.IslandHoverExpand || AutoHideNow || fullScreen || Mascot) poll.Start(); else poll.Stop();
         }
 
         /// <summary>Expandir al pasar el mouse y colapsar al hacer clic afuera (la isla nunca toma el foco).</summary>
         void OnPoll()
         {
             var p = Cursor.Position;
+            EyeFollow(p);
             if (fullScreen)
             {
                 // Borde de la pantalla donde está la isla, a su altura.
@@ -970,7 +1105,7 @@ namespace Panoptic
                 if (nearEdge || overIsland || openMenu != null) revealUntil = DateTime.Now.AddMilliseconds(700);
                 UpdateVisibility();
             }
-            else if (Settings.IslandAutoHide && islandOn)
+            else if (AutoHideNow && islandOn)
             {
                 // Cerca de su lugar o contra el borde: aparece. Expandida, con un aviso o con el menú abierto: se queda.
                 var home = HomeShape(S(cur.Width), S(cur.Height));
@@ -994,11 +1129,27 @@ namespace Panoptic
                 SetExpanded(false);
         }
 
+        /// <summary>La pupila sigue al cursor cuando está cerca de la isla.</summary>
+        void EyeFollow(Point p)
+        {
+            if (!Mascot || !Visible || eyeArea.IsEmpty) { eye.LookFrom(this, false, 0, 0); return; }
+            var sc = ShapeScreen;
+            float dx = p.X - (sc.X + eyeArea.X + eyeArea.Width / 2f), dy = p.Y - (sc.Y + eyeArea.Y + eyeArea.Height / 2f);
+            eye.LookFrom(this, dx * dx + dy * dy <= S(400) * (float)S(400), dx / S(120) * 5.5f, dy / S(120) * 4f);
+            if (eye.Moving(Clock.Ms)) StartAnim();
+        }
+
         ContextMenuStrip openMenu;
 
         protected override void OnMouseUp(MouseEventArgs e)
         {
             var h = HitAt(e.Location);
+            if (e.Button == MouseButtons.Left && Mascot && !eyeArea.IsEmpty)
+            {
+                var er = eyeArea;
+                er.Offset(ShapeClient.Location);
+                if (er.Contains(e.Location)) { eye.Blink(); StartAnim(); }
+            }
             if (e.Button == MouseButtons.Left && h == null && ShapeClient.Contains(e.Location))
             {
                 // Clic en la isla: un evento contextual se descarta; si no, alterna compacta ↔ expandida.
@@ -1033,12 +1184,18 @@ namespace Panoptic
             for (int i = 0; i < Settings.IslandPositions.Length; i++)
             {
                 string p = Settings.IslandPositions[i];
-                var it = FluentMenu.Add(m, posText[i], null, true, () => { Settings.IslandPosition = p; ChangePosition(); });
-                it.Checked = Pos == p;
+                var it = FluentMenu.Add(m, posText[i], null, true, () => { Settings.IslandNotch = false; Settings.IslandPosition = p; Relayout(); });
+                it.Checked = !Notch && Pos == p;
             }
+            var nt = FluentMenu.Add(m, "Estilo notch (negro, pegado arriba)", null, true, () => { Settings.IslandNotch = !Notch; Relayout(); });
+            nt.Checked = Notch;
             var ah = FluentMenu.Add(m, "Ocultar automáticamente", null, true, () => { Settings.IslandAutoHide = !Settings.IslandAutoHide; UpdatePolling(); });
             ah.Checked = Settings.IslandAutoHide;
+            var hc = FluentMenu.Add(m, "Ocultar con ventanas maximizadas", null, true, () => { Settings.IslandHideCovered = !Settings.IslandHideCovered; CheckCovered(); });
+            hc.Checked = Settings.IslandHideCovered;
             FluentMenu.Separator(m);
+            var ms = FluentMenu.Add(m, "Mascota (el ojo)", null, true, () => { Settings.IslandMascot = !Mascot; UpdatePolling(); UpdateEye(); Invalidate(); });
+            ms.Checked = Mascot;
             var hv = FluentMenu.Add(m, "Expandir al pasar el mouse", null, true, () => { Settings.IslandHoverExpand = !Settings.IslandHoverExpand; UpdatePolling(); });
             hv.Checked = Settings.IslandHoverExpand;
             var al = FluentMenu.Add(m, "Mostrar alertas en la isla", null, true, () => { Settings.IslandAlerts = !Settings.IslandAlerts; if (!Settings.IslandAlerts) { queue.Clear(); download = null; DismissActive(); } });
@@ -1070,18 +1227,9 @@ namespace Panoptic
 
         protected override void PaintSurface(Graphics g)
         {
-            // Fondo: acrílico de Windows (no se pinta nada), vibrancia si Windows apagó el desenfoque, o sólido.
-            if (d2d != null)
-            {
-                // Con Direct2D: la vibrancia se sube a la placa de video una vez por cambio de fondo.
-                Bitmap vib = th.TransparencyEnabled && vibrancy.Ensure(ShapeScreen, th.Dark) ? vibrancy.Region(ShapeScreen, AreaRect.Size) : null;
-                if (vib != lastVibrancy) { if (lastVibrancy != null) d2d.Forget(lastVibrancy); lastVibrancy = vib; }
-                if (vib != null) d2d.Image(vib, AreaRect, 1f);
-                else d2d.FillRect(AreaRect, th.Dark ? Theme.Hex(0x202020) : Theme.Hex(0xF3F3F3));
-            }
-            else if (th.Glass) g.Clear(Color.Transparent);
-            else if (th.TransparencyEnabled && vibrancy.Ensure(ShapeScreen, th.Dark)) vibrancy.Draw(g, ShapeScreen, AreaRect);
-            else g.Clear(th.Dark ? Theme.Hex(0x202020) : Theme.Hex(0xF3F3F3));
+            eyeArea = Rectangle.Empty;
+            // Fondo: la píldora negra del lenguaje "isla" (también en el notch).
+            if (d2d != null) d2d.FillRect(AreaRect, Color.Black); else g.Clear(Color.Black);
             if (active != null && active.Critical && !expanded)
                 FillRectI(g, Color.FromArgb((int)(255 * 0.14), th.Critical), AreaRect);
 
@@ -1208,6 +1356,13 @@ namespace Panoptic
 
         void AppIcon(Graphics g, Rectangle r)
         {
+            if (Mascot)
+            {
+                int grow = r.Width >= S(24) ? S(4) : S(1);   // 24 px en la compacta, 32 px en el encabezado
+                eyeArea = Rectangle.Inflate(r, grow, grow);
+                eye.Draw(g, d2d, eyeArea, !th.Dark);
+                return;
+            }
             Color c = MetricColor(ResColors.Memory(th));
             Fill(g, r, Color.FromArgb((int)(255 * 0.18), c), S(4));
             Glyph(g, Glyphs.Performance, r.Width >= S(24) ? fonts.Glyph16 : fonts.Glyph12, r, c);

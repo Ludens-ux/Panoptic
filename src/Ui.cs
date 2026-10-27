@@ -9,16 +9,33 @@ using System.Windows.Forms;
 
 namespace Panoptic
 {
-    /// <summary>Colores de cada recurso, como en el Administrador de tareas de Windows 11.</summary>
+    /// <summary>Color de cada métrica: se repite en su anillo, su gráfico y su número seleccionado.</summary>
     internal static class ResColors
     {
-        public static Color Cpu(Theme th) { return th.Accent; }
-        public static Color Memory(Theme th) { return th.Dark ? Theme.Hex(0xC08CF0) : Theme.Hex(0x8764B8); }
+        public static Color Cpu(Theme th) { return th.Dark ? Theme.Hex(0xF4A6C8) : Theme.Hex(0xB4497A); }
+        public static Color Memory(Theme th) { return th.Dark ? Theme.Hex(0xC4A0F5) : Theme.Hex(0x8764B8); }
         public static Color Disk(Theme th) { return th.Dark ? Theme.Hex(0x6CCB5F) : Theme.Hex(0x0F7B0F); }
-        public static Color Net(Theme th) { return th.Dark ? Theme.Hex(0xF7A146) : Theme.Hex(0xC25E00); }
-        public static Color Gpu(Theme th) { return th.Dark ? Theme.Hex(0x4CC2FF) : Theme.Hex(0x0E6FAE); }
+        public static Color Net(Theme th) { return th.Dark ? Theme.Hex(0xFFB38A) : Theme.Hex(0xC25E00); }
+        public static Color Gpu(Theme th) { return th.Dark ? Theme.Hex(0x60CDFF) : Theme.Hex(0x0E6FAE); }
         public static Color Temp(Theme th) { return th.Dark ? Theme.Hex(0xFF8A80) : Theme.Hex(0xC42B1C); }
-        public static Color Battery(Theme th) { return th.Dark ? Theme.Hex(0x9EE493) : Theme.Hex(0x3B7D23); }
+        public static Color Battery(Theme th) { return th.Dark ? Theme.Hex(0xA8E6A0) : Theme.Hex(0x3B7D23); }
+
+        /// <summary>Color de cada tipo de evento del registro (etiquetas y puntos).</summary>
+        public static Color Category(Theme th, Panoptic.Category c)
+        {
+            switch (c)
+            {
+                case Panoptic.Category.Red: return Net(th);
+                case Panoptic.Category.Programa: return Memory(th);
+                case Panoptic.Category.Dispositivo: return Gpu(th);
+                case Panoptic.Category.Energia: return Battery(th);
+                case Panoptic.Category.Alerta: return th.Dark ? Theme.Hex(0xFCE100) : Theme.Hex(0x9D5D00);
+                case Panoptic.Category.Sistema:
+                case Panoptic.Category.Seguridad: return Temp(th);
+                case Panoptic.Category.Monitor: return th.Accent;
+                default: return th.Dark ? Theme.Hex(0xCFCFCF) : Theme.Hex(0x5C5C5C);
+            }
+        }
     }
 
     /// <summary>Zona interactiva registrada durante el pintado (interfaz de modo inmediato).</summary>
@@ -59,7 +76,7 @@ namespace Panoptic
             AutoScaleMode = AutoScaleMode.None;
             KeyPreview = true;
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
-            th = Theme.Load();
+            th = LoadTheme();
             fonts = new Fonts(s);
             BackColor = th.Bg;
             tip.InitialDelay = 600;
@@ -92,9 +109,12 @@ namespace Panoptic
             ApplyDwm();
         }
 
+        /// <summary>Tema de la ventana (la isla en estilo notch siempre es oscura y sin transparencia).</summary>
+        protected virtual Theme LoadTheme() { return Theme.Load(); }
+
         public void ReloadTheme()
         {
-            th = Theme.Load();
+            th = LoadTheme();
             BackColor = th.Bg;
             UpdatePaintMode();
             ApplyDwm();
@@ -340,8 +360,7 @@ namespace Panoptic
         {
             get
             {
-                if (th.Glass) return th.Dark ? Color.FromArgb(24, 255, 255, 255) : Color.FromArgb(24, 0, 0, 0);
-                return th.Dark ? Theme.Hex(0x3A3A3A) : Theme.Hex(0xE5E5E5);
+                return th.Dark ? Color.FromArgb(26, 255, 255, 255) : Color.FromArgb(26, 0, 0, 0);
             }
         }
 
@@ -409,8 +428,8 @@ namespace Panoptic
         protected void Card(Graphics g, Rectangle r, Color fill)
         {
             var rf = new RectangleF(r.X + .5f, r.Y + .5f, r.Width - 1, r.Height - 1);
-            FillRoundP(g, rf, S(6), fill);
-            StrokeRoundP(g, rf, S(6), th.CardStroke, 1f);
+            FillRoundP(g, rf, S(8), fill);
+            StrokeRoundP(g, rf, S(8), th.CardStroke, 1f);
         }
 
         // ---- Primitivas: con Direct2D si está activo, si no con GDI+.
@@ -572,17 +591,13 @@ namespace Panoptic
         /// <summary>Gráfico de área con línea, como los del Administrador de tareas.</summary>
         protected void Graph(Graphics g, Rectangle r, float[] values, float max, Color c, bool grid, bool frame)
         {
-            if (frame)
-            {
-                float fw = Math.Max(1, s);
-                StrokeRoundP(g, new RectangleF(r.X + fw / 2, r.Y + fw / 2, r.Width - fw, r.Height - fw), 0, Color.FromArgb(th.Dark ? 70 : 90, c), fw);
-            }
             if (grid)
             {
-                Color gc = Color.FromArgb(th.Dark ? 28 : 36, c);
-                for (int i = 1; i < 10; i++) { int x = r.X + r.Width * i / 10; LineP(g, gc, 1, x + .5f, r.Y + 1, x + .5f, r.Bottom - 2); }
-                for (int i = 1; i < 10; i++) { int y = r.Y + r.Height * i / 10; LineP(g, gc, 1, r.X + 1, y + .5f, r.Right - 2, y + .5f); }
+                // Tres líneas guía horizontales, apenas visibles.
+                Color gc = th.Dark ? Color.FromArgb(15, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
+                for (int i = 1; i < 4; i++) { int y = r.Y + r.Height * i / 4; LineP(g, gc, 1, r.X + 1, y, r.Right - 1, y); }
             }
+            frame = false;
             if (values == null || values.Length < 2) return;
             if (max <= 0) max = 1;
             var pts = new PointF[values.Length];
@@ -594,9 +609,27 @@ namespace Panoptic
                 pts[i] = new PointF(r.X + inset + w * i / (values.Length - 1), r.Y + inset + h - h * v / max);
             }
             var state = ClipP(g, new Rectangle(r.X + 1, r.Y + 1, r.Width - 2, r.Height - 2));
-            AreaP(g, UnderArea(pts, r.Bottom), Color.FromArgb(th.Dark ? 60 : 45, c));
-            LinesP(g, pts, c, Math.Max(1.2f, 1.5f * s));
+            AreaP(g, UnderArea(pts, r.Bottom), Color.FromArgb(46, c));
+            LinesP(g, pts, c, Math.Max(1.2f, 1.8f * s));
             UnclipP(g, state);
+        }
+
+        /// <summary>
+        /// Anillo de progreso: pista del color al 22 % y arco con extremos redondeados que empieza a las 12 y gira en
+        /// sentido horario. <paramref name="value"/> va de 0 a 100.
+        /// </summary>
+        protected void DrawRing(Graphics g, RectangleF r, float value, Color c, float stroke)
+        {
+            var inner = RectangleF.Inflate(r, -stroke / 2, -stroke / 2);
+            StrokeEllipseP(g, inner, Color.FromArgb(56, c), stroke);
+            if (value > 0.3f) StrokeArcP(g, inner, -90f, 360f * Math.Min(100f, value) / 100f, c, stroke);
+        }
+
+        /// <summary>Etiqueta de píldora: texto en el color y fondo de ese color al 15 %.</summary>
+        protected void Pill(Graphics g, Rectangle r, string text, Color c)
+        {
+            Fill(g, r, Color.FromArgb(38, c), r.Height / 2f);
+            DrawText(g, text, fonts.Small, r, c, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
 
         /// <summary>Botón sutil (fondo solo al pasar el mouse) con glifo y texto opcional.</summary>
@@ -634,8 +667,8 @@ namespace Panoptic
             Color fill, fg;
             if (accent)
             {
-                fill = !enabled ? th.AccentDisabled : hv <= 1 ? Lerp(th.Accent, th.AccentHover, hv) : Lerp(th.AccentHover, th.AccentPressed, hv - 1);
-                fg = enabled ? th.OnAccent : th.Bg;
+                fill = !enabled ? th.ControlFill : hv <= 1 ? Lerp(th.Accent, th.AccentHover, hv) : Lerp(th.AccentHover, th.AccentPressed, hv - 1);
+                fg = enabled ? th.OnAccent : th.TextTertiary;
             }
             else
             {
@@ -659,10 +692,10 @@ namespace Panoptic
                 }
                 if (!accent) using (var pen = new Pen(ControlStroke)) g.DrawPath(pen, p);
             }
-            int tw = MeasureText(text, fonts.Body) + (glyph != null ? S(24) : 0);
+            int tw = MeasureText(text, accent && enabled ? fonts.BodyStrong : fonts.Body) + (glyph != null ? S(24) : 0);
             int x = r.X + (r.Width - tw) / 2;
             if (glyph != null) { Glyph(g, glyph, fonts.Glyph16, new Rectangle(x, r.Y, S(16), r.Height), fg); x += S(24); }
-            DrawText(g, text, fonts.Body, new Rectangle(x, r.Y, r.Right - x, r.Height), fg);
+            DrawText(g, text, accent && enabled ? fonts.BodyStrong : fonts.Body, new Rectangle(x, r.Y, r.Right - x, r.Height), fg);
             EndScale(g, st, sc);
             return h;
         }
@@ -677,7 +710,7 @@ namespace Panoptic
             bool hot = IsHover(key), down = IsPressed(key);
             var rf = new RectangleF(tr.X + .5f, tr.Y + .5f, tr.Width - 1, tr.Height - 1);
             // La perilla viaja con un resorte que rebota apenas; el color acompaña el recorrido.
-            float t = Spring("t:" + key, on ? 1f : 0f, 0.34f, 0.68f);
+            float t = Spring("t:" + key, on ? 1f : 0f, 0.2f, 0.8f);
             float tc = Math.Max(0, Math.Min(1, t));
             float hv = Spring("h:" + key, hot ? 1f : 0f, 0.16f);
             float tr2 = rf.Height / 2;
@@ -693,7 +726,8 @@ namespace Panoptic
             float kw = kd + Spring("k:" + key, down ? 4f : 0f, 0.2f, 0.8f) * s;
             float left = rf.X + rf.Height / 2, right = rf.Right - rf.Height / 2;
             float cx = left + (right - left) * t, cy = rf.Y + rf.Height / 2;
-            FillRoundP(g, new RectangleF(cx - kw / 2, cy - kd / 2, kw, kd), kd / 2, Lerp(th.TextSecondary, th.OnAccent, tc));
+            Color knobOff = th.Dark ? Color.FromArgb(204, 255, 255, 255) : Color.FromArgb(204, 0, 0, 0);
+            FillRoundP(g, new RectangleF(cx - kw / 2, cy - kd / 2, kw, kd), kd / 2, Lerp(knobOff, th.OnAccent, tc));
             if (focusVisible && focusKey == key)
                 StrokeRoundP(g, RectangleF.Inflate(rf, 3 * s, 3 * s), rf.Height / 2 + 3 * s, th.Text, 2 * s);
             return h;
@@ -724,21 +758,29 @@ namespace Panoptic
         {
             Card(g, r);
             int x = r.X + S(16);
-            if (glyph != null)
-            {
-                Glyph(g, glyph, fonts.Glyph16, new Rectangle(x, r.Y, S(20), r.Height), th.Text);
-                x += S(36);
-            }
             int textW = r.Right - S(16) - controlWidth - S(16) - x;
             if (string.IsNullOrEmpty(desc))
                 DrawText(g, title, fonts.Body, new Rectangle(x, r.Y, textW, r.Height), th.Text);
             else
             {
                 DrawText(g, title, fonts.Body, new Rectangle(x, r.Y + r.Height / 2 - S(19), textW, S(20)), th.Text);
-                DrawText(g, desc, fonts.Caption, new Rectangle(x, r.Y + r.Height / 2 + S(1), textW, S(18)), th.TextSecondary);
+                DrawText(g, desc, fonts.Caption, new Rectangle(x, r.Y + r.Height / 2 + S(1), textW, S(18)), Mix55);
             }
             return new Rectangle(r.Right - S(16) - controlWidth, r.Y, controlWidth, r.Height);
         }
+
+        /// <summary>Fila elegida: acento al 15 % y una barra interior de 3 px a la izquierda.</summary>
+        protected void SelectedRow(Graphics g, Rectangle r)
+        {
+            Fill(g, r, Color.FromArgb(38, th.Accent), S(4));
+            Fill(g, new Rectangle(r.X + S(2), r.Y + S(8), S(3), r.Height - S(16)), th.Accent, S(1.5f));
+        }
+
+        /// <summary>Línea divisoria de encabezados (blanco al 8 %).</summary>
+        protected Color HeaderLine { get { return th.Dark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0); } }
+
+        /// <summary>Texto al 55 % (descripciones y encabezados de columna).</summary>
+        protected Color Mix55 { get { return Theme.Mix(th.Bg, th.Dark ? Color.White : Color.Black, 0.55f); } }
 
         // ------------------------------------------------------------------ mouse y teclado
 
@@ -919,6 +961,12 @@ namespace Panoptic
             return springs.TryGetValue(key, out sp) && !sp.Settled;
         }
 
+        /// <summary>Animaciones propias de la ventana (por ejemplo, el ojo): devuelve true mientras se mueven.</summary>
+        protected virtual bool MotionExtra(double now) { return false; }
+
+        /// <summary>Arranca el bucle de animación (para MotionExtra).</summary>
+        protected void RequestMotion() { StartMotion(); }
+
         void StartMotion()
         {
             if (!IsHandleCreated || IsDisposed) return;
@@ -950,6 +998,7 @@ namespace Panoptic
                 if (Math.Abs(sp.X - sp.Target) < 0.002f * scale && Math.Abs(sp.V) < 0.02f * scale) { sp.X = sp.Target; sp.V = 0; sp.Settled = true; }
                 else any = true;
             }
+            if (MotionExtra(now)) any = true;
             Invalidate();
             if (!any) motion.Stop();
         }

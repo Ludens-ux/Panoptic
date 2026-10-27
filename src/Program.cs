@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -13,6 +13,8 @@ namespace Panoptic
             Application.SetCompatibleTextRenderingDefault(false);
 
             if (args.Length >= 2 && args[0] == "--island-gpu") return Preview.IslandGpu(args);
+            if (args.Length >= 2 && args[0] == "--make-icon") { Eye.WriteIco(args[1]); return 0; }
+            if (args.Length >= 2 && args[0] == "--eye-sheet") return Preview.EyeSheet(args[1]);
             if (args.Length >= 2 && args[0] == "--main-gpu") return Preview.MainGpu(args);
             if (args.Length >= 2 && args[0] == "--render")
                 return Preview.Render(args);

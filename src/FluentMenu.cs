@@ -24,7 +24,7 @@ namespace Panoptic
                 Native.DwmSetWindowAttribute(m.Handle, Native.DWMWA_USE_IMMERSIVE_DARK_MODE, ref v, 4);
                 v = Native.DWMWCP_ROUND;
                 Native.DwmSetWindowAttribute(m.Handle, Native.DWMWA_WINDOW_CORNER_PREFERENCE, ref v, 4);
-                v = Native.ColorRef(th.WindowStroke);
+                v = Native.ColorRef(th.WindowBorder);
                 Native.DwmSetWindowAttribute(m.Handle, Native.DWMWA_BORDER_COLOR, ref v, 4);
             };
             return m;

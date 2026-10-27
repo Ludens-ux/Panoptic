@@ -15,8 +15,8 @@ namespace Panoptic
     {
         static readonly Category[] LogCategories =
         {
-            Category.Programa, Category.Dispositivo, Category.Red, Category.Energia, Category.Sesion,
-            Category.Sistema, Category.Alerta, Category.Inicio, Category.Servicio, Category.Bloqueo, Category.Seguridad
+            Category.Programa, Category.Dispositivo, Category.Red, Category.Energia, Category.Alerta, Category.Seguridad,
+            Category.Sesion, Category.Sistema, Category.Inicio, Category.Servicio, Category.Bloqueo
         };
 
         void ShowExportMenu(Point at)

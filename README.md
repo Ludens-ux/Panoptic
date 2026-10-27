@@ -80,7 +80,11 @@ Se activan en **Configuración > Funciones de administrador** (pide permiso una 
 
 ### Transparencia
 
-Si en Windows están activados los **Efectos de transparencia** (Configuración > Personalización > Colores), la ventana principal usa **Mica** y el panel y el widget usan **Acrílico**, como las apps de Windows 11. Si se desactivan, todo pasa a fondo sólido en el momento.
+Si en Windows están activados los **Efectos de transparencia** (Configuración > Personalización > Colores), la ventana principal, el panel y el widget usan **Acrílico** con un tinte casi negro. Si se desactivan, todo pasa a fondo sólido en el momento.
+
+### Diseño
+
+Superficies casi negras, tarjetas sutiles y **un color por métrica** que se repite en su anillo, su gráfico y su número. El acento es el violeta del ojo (en Configuración se puede usar el color de Windows). La ventana principal tiene arriba una **cabecera isla** con el ojo vivo y los anillos de CPU, memoria y temperatura; Rendimiento muestra una grilla de anillos con el detalle de la métrica elegida.
 
 ### Isla dinámica
 
@@ -89,9 +93,12 @@ Es el estilo predeterminado. En **Configuración > Widget > Estilo** se elige en
 - **Compacta:** barra arriba al centro con mini anillos de CPU, memoria y temperatura, más la bajada de red. La rueda del mouse cambia la vista entre CPU·Mem·Temp, CPU·GPU·Disco y Red.
 - **Expandida** (clic, o al pasar el mouse si está activado): seis anillos con su detalle, la red con su gráfico y los botones Fijar y Abrir. Se expande con un rebote y se cierra con un clic afuera o con Esc.
 - **Posición:** arriba, abajo (sobre la barra de tareas), a la izquierda o a la derecha. Abajo y en los costados la vista expandida usa barras y suma los 3 procesos que más consumen; en los costados la compacta es vertical.
+- **Notch:** tercer estilo (Configuración > Widget > Estilo, o clic derecho en la isla): negro, pegado al borde de arriba, con las esquinas de abajo redondeadas como el de la Mac. Sin sombra ni transparencia, y también se puede ocultar automáticamente.
 - **Ocultar automáticamente:** se esconde en el borde y aparece al acercar el mouse (o cuando llega una alerta).
 - **Estados contextuales** (durante unos segundos): descarga activa, temperatura alta, un proceso que usa más del 40 % de CPU durante 2 minutos (con botón Finalizar tarea), cargador conectado y USB conectado. Se encolan, los críticos van primero y no se repiten en 5 minutos.
 - **Más avisos:** cámara o micrófono en uso (con puntos de color en la compacta mientras dure), eventos del WriteBlocker (disco protegido o con escritura habilitada, modo forense), captura copiada al portapapeles (con botón Guardar), batería cargada, baja, desenchufada y ahorro de batería, red y VPN conectada o desconectada, sin internet, y volumen y brillo con su barra.
+- **Mascota:** en lugar del ícono, un ojo con forma de lente que parpadea, sigue al cursor y reacciona a la PC: se concentra con la CPU alta, se pone rojo con temperatura alta, se duerme si no usás la PC, se sorprende con los avisos, mira hacia abajo al conectar un USB, hace un destello con las capturas, se pone en guardia ante un inicio de sesión fallido o una ejecución sospechosa, y muestra un punto verde o naranja con la cámara o el micrófono en uso. Clic sobre el ojo: parpadea. Se desactiva en Configuración.
+- **Ocultar con ventanas maximizadas** (activado de fábrica): mientras la ventana activa está maximizada o pegada arriba debajo de la isla, se esconde en el borde y aparece al acercar el mouse.
 - No aparece en la barra de tareas ni en Alt+Tab, no roba el foco y se oculta con apps en pantalla completa.
 
 ### Movimiento y dibujado
